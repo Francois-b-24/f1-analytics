@@ -47,11 +47,12 @@ streamlit Home.py
 ```
 
 🧰 Technologies
-	•	Python 3.11
-	•	Streamlit
-	•	FastF1
-	•	Plotly
-	•	Docker
+
+- Python 
+- Streamlit
+- FastF1
+- Plotly
+- Docker
 
 ✨ Auteur
 Projet réalisé par BOUSSENGUI François,
