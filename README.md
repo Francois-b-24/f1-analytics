@@ -60,6 +60,5 @@ streamlit Home.py
 - Plotly
 - Docker
 
-✨ Auteur
-Projet réalisé par BOUSSENGUI François,
+✨ Projet réalisé par BOUSSENGUI François,
 Passionné de data science et de Formule 1 🏁.
