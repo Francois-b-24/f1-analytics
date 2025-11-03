@@ -17,6 +17,7 @@ Application **Streamlit** basée sur **FastF1** pour analyser les données de Fo
 
 ## 📁 Structure du projet
 
+```bash
 f1-analytics/
 ├─ Home.py                # Page d’accueil principale
 ├─ scr/                 # Fonctions internes (config, data, ui, utils)
@@ -25,7 +26,7 @@ f1-analytics/
 ├─ pyproject.toml  #Configuration de l'env et des dépendances
 ├─ Dockerfile
 └─ README.md
-
+```
 ---
 
 ## ⚙️ Installation locale
@@ -38,7 +39,12 @@ cd f1-analytics
 
 2️⃣ Installer les dépendances
 ```bash
-pip install -r requirements.txt
+uv sync
+```
+ou avec poetry :
+
+```bash
+poetry install
 ```
 
 3️⃣ Lancer l’application
