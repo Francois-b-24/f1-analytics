@@ -1,9 +1,16 @@
 import streamlit as st
 import fastf1
 from datetime import datetime
+from streamlit_extras.colored_header import colored_header
+from streamlit_extras.add_vertical_space import add_vertical_space
+from streamlit_extras.metric_cards import style_metric_cards
 
 def selecteurs_session():
-    st.header("Session")
+    colored_header(
+        "Session",
+        description="Sélectionnez la saison, le Grand Prix et le type de session",
+        color_name="blue-70",
+    )
 
     annee = st.selectbox("Saison", list(range(2018, datetime.now().year + 1))[::-1])
 
@@ -27,7 +34,11 @@ def selecteurs_session():
     return annee, event_name, session_type, st.session_state.get("loaded", False)
 
 def selecteurs_pilotes(pilotes: list[str]):
-    st.subheader("Pilotes")
+    colored_header(
+        "Pilotes",
+        description="Choisissez un ou deux pilotes à comparer",
+        color_name="blue-70",
+    )
     if pilotes:
         driver_1 = st.selectbox("Pilote 1", pilotes, key="drv1_sidebar")
         driver_2 = st.selectbox("Pilote 2 (optionnel)", [""] + pilotes, key="drv2_sidebar")
@@ -42,8 +53,6 @@ def selecteurs_pilotes(pilotes: list[str]):
     if d2 == d1:
         d2 = ""
     return d1, d2
-
-import streamlit as st
 
 def selections_courantes(required: bool = True):
     """Récupère (annee, grand_prix, session_type, loaded) depuis session_state.
