@@ -1,5 +1,7 @@
 # 🏎️ F1 Analytics Dashboard
 
+https://f1-fastanalytics.streamlit.app
+
 Application **Streamlit** basée sur **FastF1** pour analyser les données de Formule 1 : chronos, télémétrie, météo, pneus, arrêts aux stands, etc.
 
 ---
