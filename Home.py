@@ -148,8 +148,7 @@ if 'Compound' in tours:
                 .groupby(['Driver','Compound']).size()
                 .reset_index(name='Tours'))
     fig = px.bar(comp, x='Driver', y='Tours', color='Compound', barmode='stack')
-    with chart_container(comp):
-        st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Pas d'information pneus disponible.")
 
