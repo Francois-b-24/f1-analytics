@@ -1,5 +1,3 @@
-from asyncio import set_event_loop
-
 import streamlit as st
 from scr.config import configure_page
 from scr.ui import selections_courantes
