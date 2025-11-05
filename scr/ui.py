@@ -20,7 +20,15 @@ def selecteurs_session():
     except Exception:
         events = []
     event_name = st.selectbox("Grand Prix", options=events if events else ["Bahrain", "Monaco", "Monza"])
-    session_type = st.selectbox("Type de session", ["FP1", "FP2", "FP3", "Q", "R"])
+    session_labels = {
+        "FP1": "Essais libres 1",
+        "FP2": "Essais libres 2",
+        "FP3": "Essais libres 3",
+        "Q": "Qualifications",
+        "R": "Course",
+    }
+    session_display = st.selectbox("Type de session", list(session_labels.values()))
+    session_type = [k for k, v in session_labels.items() if v == session_display][0]
 
     if "loaded" not in st.session_state:
         st.session_state["loaded"] = False
@@ -32,6 +40,22 @@ def selecteurs_session():
         st.button("Réinitialiser", key="reset_btn", on_click=lambda: st.session_state.update(loaded=False))
 
     return annee, event_name, session_type, st.session_state.get("loaded", False)
+
+def selecteur_pilote_unique(pilotes: list[str]):
+    colored_header(
+        "Pilotes",
+        description="Choisissez un pilotes",
+        color_name="blue-70",
+    )
+    if pilotes:
+        st.selectbox("Pilote", pilotes, key="drv1_sidebar_")
+    else:
+        st.caption("Aucun pilote disponible")
+
+    d1 = st.session_state.get("drv1_sidebar_", pilotes[0] if pilotes else "")
+    if d1 == "" :
+        d1 = ""
+    return d1
 
 def selecteurs_pilotes(pilotes: list[str]):
     colored_header(
@@ -55,9 +79,10 @@ def selecteurs_pilotes(pilotes: list[str]):
     return d1, d2
 
 def selections_courantes(required: bool = True):
-    """Récupère (annee, grand_prix, session_type, loaded) depuis session_state.
+    """Récupère (annee, grand_prix, session_type, loaded, pilote 1 et 2) depuis session_state.
     Si required=True et que ce n'est pas prêt, affiche un message et stoppe la page.
     """
+
     annee = st.session_state.get("annee")
     grand_prix = st.session_state.get("grand_prix")
     session_type = st.session_state.get("session_type")

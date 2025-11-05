@@ -15,11 +15,12 @@ configure_page_home("F1 Analytics – Home")
 
 st.title("🏎️ F1 Analytics")
 sidebar_hint_once()
-annee, grand_prix, session_type, loaded = selecteurs_session()
+annee, grand_prix, session_type, loaded, = selecteurs_session()
 st.session_state["annee"] = annee
 st.session_state["grand_prix"] = grand_prix
 st.session_state["session_type"] = session_type
 st.session_state["loaded"] = loaded
+
 
 if not loaded:
     st.info("Sélectionnez une saison, un Grand Prix et un type de session, puis cliquez **Charger** les données et parcourez les pages.")
@@ -28,20 +29,18 @@ if not loaded:
 # Chargement du WEEK-END de Grand prix
 try:
     _data = chargement_session(annee, grand_prix, session_type)
-    nom_gp = _data['nom']
+    session = session_type
+    nom_gp = grand_prix
     tours = _data['tours']
     pilotes = _data['pilotes']
     meteo = _data['meteo']
     resultats = _data['resultats']
-    st.success(f"Session {nom_gp} chargée ✅")
 except Exception as e:
     st.info("Données indisponibles pour cette sélection (connexion, calendrier ou session non disponible).")
     with st.expander("Détails techniques (debug)"):
         st.write(e)
     st.stop()
 
-with st.sidebar:
-    d1, d2 = selecteurs_pilotes(pilotes)
 
 style_metric_cards(background_color = "#FFFFFF", border_color="#2B313E", border_left_color="#00D4FF", border_radius_px=8, box_shadow=True)
 
@@ -104,12 +103,11 @@ div[data-testid="stMetricLabel"] { color: inherit !important; font-weight: 600; 
 
 colored_header("Overview", description=None, color_name="blue-70")
 # KPIs
-c1, c2, c3, c4 = st.columns(4)
+c1, c2, c3 = st.columns(3)
 total_laps = int(tours['LapNumber'].max()) if not tours.empty else 0
 with c1: st.metric("Nombre de tours", f"{total_laps}")
 with c2: st.metric("Nombre de pilotes au départ", f"{len(pilotes)}")
-with c3: st.metric("Session", session_type)
-with c4: st.metric("Grand-Prix", nom_gp)
+with c3: st.metric("Grand-Prix", nom_gp)
 
 add_vertical_space(1)
 # Meilleur tour de la session
@@ -155,7 +153,7 @@ else:
 add_vertical_space(1)
 colored_header("Résultats de la course", description="Résultats officiels si disponibles", color_name="blue-70")
 if not resultats.empty:
-    cols = [c for c in ["Position","Abbreviation","DriverNumber","TeamName","Points","Status","Time","FastestLapTime"] if c in resultats.columns]
+    cols = [c for c in ["Position","BroadcastName","DriverNumber","TeamName","Points","Status","Time","FastestLapTime"] if c in resultats.columns]
     res = resultats[cols].copy()
     res = pd.DataFrame(res).copy()
     for c in ["Time","FastestLapTime"]:

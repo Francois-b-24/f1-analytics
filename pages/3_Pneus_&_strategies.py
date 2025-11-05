@@ -4,10 +4,10 @@ from scr.config import configure_page
 from scr.ui import selections_courantes
 from scr.data import chargement_session
 
+
 configure_page("F1 Analytics – Pneus & Stratégie")
 
 st.subheader("Pneus & Stratégie")
-
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 
