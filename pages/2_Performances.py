@@ -6,7 +6,7 @@ from scr.ui import selections_courantes
 configure_page("F1 Analytics – Performances")
 
 st.subheader("Performances")
-st.caption("*IllustrationChangement de positions durant la courses*")
+st.caption("*Illustration des changements de positions durant la courses*")
 st.warning("*Les résultats ne sont disponibles que pour une session de type : Course (R)*")
 
 annee, grand_prix, session_type, loaded= selections_courantes(required=True)

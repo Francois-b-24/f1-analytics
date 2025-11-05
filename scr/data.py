@@ -195,8 +195,8 @@ def figure_positions_par_tour(sess, pilotes=None):
             pilotes = []
 
     fig, ax = plt.subplots(figsize=(8.0, 4.9))
-    fig.patch.set_facecolor('white')
-    ax.set_facecolor('white')
+    fig.patch.set_facecolor('black')
+    ax.set_facecolor('black')
 
     for drv in pilotes:
         try:
