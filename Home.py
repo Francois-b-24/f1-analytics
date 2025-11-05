@@ -1,13 +1,12 @@
 import streamlit as st
 from scr.config import configure_page_home
-from scr.ui import selecteurs_session, selecteurs_pilotes, sidebar_hint_once
+from scr.ui import selecteurs_session, sidebar_hint_once
 from scr.data import chargement_session
 from scr.utils import formatage_timedelta
 import plotly.express as px
 import pandas as pd
 from streamlit_extras.metric_cards import style_metric_cards
 from streamlit_extras.colored_header import colored_header
-from streamlit_extras.chart_container import chart_container
 from streamlit_extras.add_vertical_space import add_vertical_space
 
 configure_page_home("F1 Analytics – Home")
