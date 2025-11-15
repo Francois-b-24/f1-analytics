@@ -2,6 +2,10 @@ import streamlit as st
 from scr.config import configure_page
 from scr.ui import selections_courantes
 from scr.data import chargement_session
+from scr.ui import context_sidebar_only
+
+with open("f1_theme.css") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 configure_page("F1 Analytics – Export & Données")
 
@@ -9,13 +13,14 @@ st.subheader("Exports rapides")
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 
+if not loaded:
+    st.warning("Aucune session n'est chargée. Retournez à l'accueil.")
+    st.page_link("Home.py", label="🏠 Retour à la Home")
+    st.stop()
+
 data = chargement_session(annee, grand_prix, session_type)
 tours = data["tours"]
 pilotes = data["pilotes"]
-
-if not loaded:
-    st.info("Charge d’abord une session depuis la Home.")
-    st.stop()
 
 data = chargement_session(annee, grand_prix, session_type)
 tours = data['tours']

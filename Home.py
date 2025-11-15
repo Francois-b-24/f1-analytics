@@ -9,10 +9,30 @@ from streamlit_extras.metric_cards import style_metric_cards
 from streamlit_extras.colored_header import colored_header
 from streamlit_extras.add_vertical_space import add_vertical_space
 
+
+
 configure_page_home("F1 Analytics – Home")
 
 
-st.title("🏎️ F1 Analytics")
+
+st.markdown(
+    """
+    <div style="text-align:center; font-size: 1.5em; font-weight: 500;">
+        <span class="f1-glow">🏎️ F1 Analytics</span>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# Splash phrase racing paddock (gris sobre)
+st.markdown(
+    '<div style="text-align:center;font-size:1.2em;color:#e9ecef;padding-top:0.7em;padding-bottom:0.5em;font-family:Orbitron,Arial Black,Arial">'
+    '"Still I Rise" <span style="color:#adb5bd;font-size:0.7em;">– Lewis Hamilton</span>'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+
 sidebar_hint_once()
 annee, grand_prix, session_type, loaded, = selecteurs_session()
 st.session_state["annee"] = annee
@@ -43,62 +63,10 @@ except Exception as e:
 
 style_metric_cards(background_color = "#FFFFFF", border_color="#2B313E", border_left_color="#00D4FF", border_radius_px=8, box_shadow=True)
 
-st.markdown(
-    """
-<style>
-/* Robust theming for Streamlit metrics: handles macOS/browsers dark mode and Streamlit's own theme attr */
+# Import du thème CSS racing paddock premium
+with open("f1_theme.css") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-/* System preference (browser) */
-@media (prefers-color-scheme: light) {
-  div[data-testid="stMetric"] {
-    background-color: #FFFFFF !important;
-    border: 1px solid #2B313E !important;
-    border-left: 0.5rem solid #00D4FF !important;
-    border-radius: 8px !important;
-    padding: 12px !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
-  }
-  div[data-testid="stMetric"] * { color: #000000 !important; }
-}
-
-@media (prefers-color-scheme: dark) {
-  div[data-testid="stMetric"] {
-    background-color: #2B313E !important;
-    border: 1px solid #00D4FF !important;
-    border-left: 0.5rem solid #00D4FF !important;
-    border-radius: 8px !important;
-    padding: 12px !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
-  }
-  div[data-testid="stMetric"] * { color: #FFFFFF !important; }
-}
-
-/* Streamlit theme attribute overrides (higher priority than media query on some setups) */
-html[data-theme="light"] div[data-testid="stMetric"],
-body[data-theme="light"] div[data-testid="stMetric"] {
-  background-color: #FFFFFF !important;
-  border: 1px solid #2B313E !important;
-  border-left: 0.5rem solid #00D4FF !important;
-}
-html[data-theme="light"] div[data-testid="stMetric"] *,
-body[data-theme="light"] div[data-testid="stMetric"] * { color: #000000 !important; }
-
-html[data-theme="dark"] div[data-testid="stMetric"],
-body[data-theme="dark"] div[data-testid="stMetric"] {
-  background-color: #2B313E !important;
-  border: 1px solid #00D4FF !important;
-  border-left: 0.5rem solid #00D4FF !important;
-}
-html[data-theme="dark"] div[data-testid="stMetric"] *,
-body[data-theme="dark"] div[data-testid="stMetric"] * { color: #FFFFFF !important; }
-
-/* Explicit targets for value/label to win against Streamlit inline styles */
-span[data-testid="stMetricValue"],
-div[data-testid="stMetricLabel"] { color: inherit !important; font-weight: 600; }
-</style>
-""",
-    unsafe_allow_html=True,
-)
 
 colored_header("Overview", description=None, color_name="blue-70")
 # KPIs

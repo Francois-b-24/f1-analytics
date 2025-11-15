@@ -1,0 +1,69 @@
+/* === Thème F1 Racing Rouge-Paddock Premium (moins flashy) === */
+
+/* --- Fond général paddock --- */
+body {
+    background: linear-gradient(120deg, #1b1a1d 0%, #292123 60%, #e84545 100%);
+}
+header[data-testid="stHeader"],
+section.main > div:first-child {
+    background: none;
+}
+
+/* --- Splash et titre paddock --- */
+.f1-glow {
+    font-family: 'Orbitron', 'Arial Black', Arial, sans-serif;
+    font-size: 2.7em;
+    text-shadow: 0 2px 8px #33333388;
+    color: #e84545;
+    letter-spacing: 1.5px;
+    margin-bottom: 0.2em;
+    font-weight: 900;
+}
+.f1-flag {
+    vertical-align: middle;
+    margin-left: 8px;
+}
+
+/* --- Sidebar racing dégradé rouge premium --- */
+section[data-testid="stSidebar"] > div {
+    background: linear-gradient(160deg, #e84545 0%, #171718 100%);
+    border-top-right-radius: 16px;
+    border-bottom-right-radius: 14px;
+    box-shadow: 0 2px 10px 0 #34242858;
+}
+
+/* --- Cartes métriques --- */
+div[data-testid="stMetric"] {
+    background: #18181d !important;
+    border: 1px solid #893838 !important;
+    border-left: 0.5rem solid #e84545 !important;
+    border-radius: 10px !important;
+    padding: 15px !important;
+    margin-bottom: 4px!important;
+    box-shadow: 0 2px 8px rgba(143,0,0,0.08);
+}
+div[data-testid="stMetric"] * { color: #f0f2f6 !important; }
+
+/* --- Plotly racing fond --- */
+[data-testid="stPlotlyChart"] .js-plotly-plot .plotly {
+    background: #181a20 !important;
+}
+
+/* --- Blocage logo Streamlit défaut --- */
+#MainMenu, footer {visibility: hidden;}
+
+/* --- Tab et boutons paddock --- */
+.stTabs [data-baseweb="tab"] {
+    color: #e84545bb;
+}
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(80deg,#e8454520, #181a20 85%);
+    color: #fff0f0;
+    border-bottom: 2px solid #e84545;
+    font-weight: 700;
+}
+
+/* --- Effet hover racing pour dataframes --- */
+.stDataFrame tbody tr:hover {
+    background-color: #70383c14 !important;
+}

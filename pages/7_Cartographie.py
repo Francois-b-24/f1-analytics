@@ -2,7 +2,7 @@ from scr.data import figure_carte_vitesse, figure_carte_rapports, figure_carte_v
 import streamlit as st
 from scr.config import configure_page
 from scr.data import chargement_session
-from scr.ui import selections_courantes, selecteur_pilote_unique
+from scr.ui import selections_courantes, selecteur_pilote_unique, context_sidebar_only
 from streamlit_extras.metric_cards import style_metric_cards
 from streamlit_extras.colored_header import colored_header
 from streamlit_extras.chart_container import chart_container
@@ -11,7 +11,15 @@ from streamlit_extras.add_vertical_space import add_vertical_space
 configure_page("F1 Analytics – Cartographie")
 st.subheader("Cartographie")
 
-annee, grand_prix, session_type, loaded= selections_courantes(required=True)
+with open("f1_theme.css") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+annee, grand_prix, session_type, loaded = selections_courantes(required=True)
+if not loaded:
+    st.warning("Aucune session n'est chargée. Retournez à la page d'accueil.")
+    st.page_link("Home.py", label="🏠 Retour à la Home")
+    st.stop()
+
 data = chargement_session(annee, grand_prix, session_type)
 sess = data["session"]
 pilotes = data['pilotes']

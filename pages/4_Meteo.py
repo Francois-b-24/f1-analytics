@@ -6,6 +6,9 @@ from scr.config import configure_page
 from scr.ui import selections_courantes
 from scr.data import chargement_session
 
+with open("f1_theme.css") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
 configure_page("F1 Analytics – Météo")
 
 st.subheader("Données météo de la session")

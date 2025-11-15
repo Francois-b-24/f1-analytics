@@ -4,6 +4,9 @@ from scr.ui import selections_courantes
 from scr.data import chargement_session
 from scr.utils import formatage_timedelta
 
+with open("f1_theme.css") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
 configure_page("F1 Analytics – Arrêts aux stands")
 
 st.subheader("Arrêts aux stands")

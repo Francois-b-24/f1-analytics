@@ -9,6 +9,9 @@ from streamlit_extras.colored_header import colored_header
 from streamlit_extras.chart_container import chart_container
 from streamlit_extras.add_vertical_space import add_vertical_space
 
+with open("f1_theme.css") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
 configure_page("F1 Analytics – Tours & Chronos")
 
 st.subheader("Tours & Chronos")
@@ -16,20 +19,17 @@ st.caption("Comparaison des performances entre 2 pilotes possible.")
 
 # 1) Récupérer les sélections faites sur Home
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
+if not loaded:
+    st.warning("Aucune session n'est chargée. Retournez à l'accueil.")
+    st.page_link("Home.py", label="🏠 Retour à la Home")
+    st.stop()
 
 # 2) Charger les données une seule fois (cache côté scr.data)
 data = chargement_session(annee, grand_prix, session_type)
 tours = data["tours"]
 pilotes = data["pilotes"]
 
-if not loaded:
-    st.info("Charge d’abord une session depuis la page Home.")
-    st.stop()
-
-data = chargement_session(annee, grand_prix, session_type)
-tours = data['tours']
-pilotes = data['pilotes']
-
+# suppression de la logique des selecteurs dans la sidebar ici
 with st.sidebar:
     pilote_1, pilote_2 = selecteurs_pilotes(pilotes)
 
