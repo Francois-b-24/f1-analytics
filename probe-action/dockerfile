@@ -1,4 +1,3 @@
-# probe-action/Dockerfile
 FROM ghcr.io/puppeteer/puppeteer:17.0.0
 
 # Dossier de travail dans le container
