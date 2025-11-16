@@ -7,4 +7,4 @@ WORKDIR /home/pptruser/src
 COPY . .
 
 # Commande par défaut : exécuter notre script Node
-CMD ["node", "probe.js"]
+CMD ["node", "/home/pptruser/src/probe.js"]
