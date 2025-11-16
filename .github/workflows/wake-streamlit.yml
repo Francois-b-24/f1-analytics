@@ -2,8 +2,8 @@ name: Trigger keep-alive probe for Streamlit app
 
 on:
   schedule:
-    # Toutes les 24h à 05:00 UTC (modifie comme tu veux)
-    - cron: "0 */48 * * *"
+    # Toutes les 6h à 05:00 UTC (modifie comme tu veux)
+    - cron: "0 */6 * * *"
   workflow_dispatch:  # pour le lancer à la main depuis l'onglet Actions
     inputs: {}
 
