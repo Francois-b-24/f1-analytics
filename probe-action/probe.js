@@ -1,69 +1,64 @@
-// probe-action/probe.js
-const puppeteer = require("puppeteer");
+const puppeteer = require('puppeteer');
 
-
+// 👉 Liste des apps à réveiller
 const TARGET_URLS = [
   "https://f1-fastanalytics.streamlit.app/",
   "https://watchanalytics.streamlit.app/",
 ];
 
-const PAGE_LOAD_TIMEOUT_MS = 20000;
+const WAKE_UP_BUTTON_TEXT = "app back up";
+const PAGE_LOAD_GRACE_PERIOD_MS = 8000;
 
-// On va tester plusieurs formulations possibles du bouton de réveil
-const WAKE_UP_KEYWORDS = [
-  "wake up",
-  "get this app back up",
-  "réveiller cette application",
-];
+console.log(process.version);
 
-async function wakeUrl(url) {
-  console.log(`\n=== Probe sur ${url} ===`);
+(async () => {
   const browser = await puppeteer.launch({
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    headless: true,
+    ignoreHTTPSErrors: true,
+    args: ['--no-sandbox'],
   });
 
-  try {
-    const page = await browser.newPage();
-    console.log(`Navigation vers ${url} ...`);
-    await page.goto(url, { waitUntil: "networkidle2", timeout: PAGE_LOAD_TIMEOUT_MS });
-
-    console.log("Page chargée, recherche d'un bouton de réveil éventuel...");
-
-    // On récupère tous les éléments cliquables potentiels
-    const candidates = await page.$$("button, a, div, span");
-
-    let clicked = false;
-    for (const el of candidates) {
-      const text = (await page.evaluate((node) => node.innerText || "", el)).trim().toLowerCase();
-
-      if (!text) continue;
-
-      // On regarde si le texte contient une des expressions attendues
-      if (WAKE_UP_KEYWORDS.some((kw) => text.includes(kw))) {
-        console.log(`Bouton potentiel trouvé avec le texte : "${text}"`);
-        await el.click();
-        console.log("👉 Clic sur le bouton de réveil !");
-        clicked = true;
-        await page.waitForTimeout(5000); // on laisse le temps à l'app de se lancer
-        break;
-      }
-    }
-
-    if (!clicked) {
-      console.log("Aucun bouton de réveil détecté, l'app est probablement déjà active ✅");
+  // Fonction de check pour une page ou un frame
+  const checkForHibernation = async (target, url) => {
+    // On cherche un bouton qui contient le texte du bouton de réveil
+    const [button] = await target.$x(`//button[contains(., '${WAKE_UP_BUTTON_TEXT}')]`);
+    if (button) {
+      console.log(`App hibernating pour ${url}. Attempting to wake up!`);
+      await button.click();
     } else {
-      console.log("Réveil terminé (si tout s'est bien passé) ✅");
+      console.log(`Aucun bouton de réveil détecté pour ${url} (probablement déjà active).`);
+    }
+  };
+
+  try {
+    for (const url of TARGET_URLS) {
+      console.log(`\n=== Probe sur ${url} ===`);
+      const page = await browser.newPage();
+
+      console.log("Ouverture de la page...");
+      await page.goto(url, { waitUntil: 'networkidle2' }).catch(async (e) => {
+        console.log(`Erreur de navigation vers ${url}:`, e.message || e);
+      });
+
+      // Attente que la page de veille ou l'app se charge
+      await page.waitForTimeout(PAGE_LOAD_GRACE_PERIOD_MS);
+
+      // 1️⃣ On vérifie sur la page principale
+      await checkForHibernation(page, url);
+
+      // 2️⃣ On vérifie aussi dans les frames (au cas où Streamlit encapsule le contenu)
+      const frames = page.frames();
+      for (const frame of frames) {
+        await checkForHibernation(frame, url);
+      }
+
+      await page.close();
+      console.log(`Fin du traitement pour ${url}`);
     }
   } catch (err) {
     console.error("Erreur pendant la probe :", err);
     process.exitCode = 1;
   } finally {
     await browser.close();
-  }
-}
-
-(async () => {
-  for (const url of TARGET_URLS) {
-    await wakeUrl(url);
   }
 })();
