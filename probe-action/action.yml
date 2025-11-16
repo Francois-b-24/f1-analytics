@@ -1,0 +1,5 @@
+name: "Probe Deployed Streamlit App"
+description: "Ouvre l'URL Streamlit et clique sur un bouton de réveil si nécessaire."
+runs:
+  using: "docker"
+  image: "Dockerfile"
