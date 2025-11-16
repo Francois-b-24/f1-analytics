@@ -3,6 +3,7 @@ import requests
 
 APP_URLS = [
     "https://f1-fastanalytics.streamlit.app/",
+    "https://watchanalytics.streamlit.app/"
 ]
 
 TIMEOUT = 30  # secondes
