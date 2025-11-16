@@ -1,7 +1,7 @@
 // probe-action/probe.js
 const puppeteer = require("puppeteer");
 
-// 👉 Mets ici toutes tes apps Streamlit à réveiller
+
 const TARGET_URLS = [
   "https://f1-fastanalytics.streamlit.app/",
   "https://watchanalytics.streamlit.app/",
