@@ -1,6 +1,6 @@
 import streamlit as st
 from scr.config import configure_page
-from scr.ui import selections_courantes, render_team_logo, render_driver_img
+from scr.ui import selections_courantes
 from scr.data import chargement_session, classement_session, calcul_classement_pilote, calcul_classement_constructeur
 
 configure_page("F1 Analytics – Classements")
@@ -30,8 +30,6 @@ with t1:
     if not cls.empty:
         # Ajout logos : TeamName + Driver
         df = cls.copy()
-        if "TeamName" in df:
-            df["TeamName"] = df["TeamName"].apply(lambda team: render_team_logo(team, 22))
         if "BroadcastName" in df and "DriverNumber" in df:
             # On pourrait matcher code pilote ici, mais absence parfois donc passons juste le nom
             df["BroadcastName"] = df["BroadcastName"].apply(lambda name: name)
@@ -47,8 +45,6 @@ with t2:
             standings = calcul_classement_pilote(annee, grand_prix)
         if not standings.empty:
             df = standings.copy()
-            if "TeamName" in df:
-                df["TeamName"] = df["TeamName"].apply(lambda team: render_team_logo(team, 22))
             if "BroadcastName" in df:
                 # Pilote : pas systématique d'avoir code rapide, on garde juste nom ou on peut mettre photo si mapping dispo
                 df["BroadcastName"] = df["BroadcastName"].apply(lambda name: name)
@@ -61,8 +57,6 @@ with t2:
             cstand = calcul_classement_constructeur(annee, grand_prix)
         if not cstand.empty:
             df = cstand.copy()
-            if "TeamName" in df:
-                df["TeamName"] = df["TeamName"].apply(lambda team: render_team_logo(team, 26))
             st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
         else:
             st.info("Classement constructeurs indisponible (données incomplètes ou accès réseau).")

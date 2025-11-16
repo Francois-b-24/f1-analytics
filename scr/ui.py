@@ -1,54 +1,18 @@
 import streamlit as st
-import fastf1
-from datetime import datetime
 from streamlit_extras.colored_header import colored_header
-from streamlit_extras.add_vertical_space import add_vertical_space
-from streamlit_extras.metric_cards import style_metric_cards
-
-# Mapping des logos équipe F1 (2024, adapter selon disponibilités logos)
-F1_TEAM_LOGOS = {
-    "Red Bull": "https://upload.wikimedia.org/wikipedia/en/thumb/8/8b/Red_Bull_Racing_logo.svg/220px-Red_Bull_Racing_logo.svg.png",
-    "Mercedes": "https://upload.wikimedia.org/wikipedia/en/thumb/a/af/Mercedes-Benz_in_Motorsport_logo.svg/220px-Mercedes-Benz_in_Motorsport_logo.svg.png",
-    "Ferrari": "https://upload.wikimedia.org/wikipedia/en/thumb/3/3d/Scuderia_Ferrari_Logo.svg/180px-Scuderia_Ferrari_Logo.svg.png",
-    "McLaren": "https://upload.wikimedia.org/wikipedia/en/thumb/6/6f/McLaren_Racing_logo.svg/180px-McLaren_Racing_logo.svg.png",
-    "Aston Martin": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Aston_Martin_Racing_logo.svg/190px-Aston_Martin_Racing_logo.svg.png",
-    "Alpine": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/BWT_Alpine_F1_Team_logo.svg/220px-BWT_Alpine_F1_Team_logo.svg.png",
-    "Williams": "https://upload.wikimedia.org/wikipedia/en/thumb/6/6a/Williams_Grand_Prix_Engineering_logo.svg/220px-Williams_Grand_Prix_Engineering_logo.svg.png",
-    "Haas": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Haas_F1_Team_logo.svg/190px-Haas_F1_Team_logo.svg.png",
-    "RB": "https://upload.wikimedia.org/wikipedia/commons/4/46/RB_F1_Team_logo_2024.png",
-    "Sauber": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Kick_Sauber_F1_Team_logo_2024.png/220px-Kick_Sauber_F1_Team_logo_2024.png",
-}
-
-F1_DRIVER_IMAGES = {
-    "HAM": "https://upload.wikimedia.org/wikipedia/commons/8/87/Lewis_Hamilton_Mercedes_AMG_Petronas_F1_Team_2023_%28cropped%29.jpg",
-    "VER": "https://upload.wikimedia.org/wikipedia/commons/8/83/Max_Verstappen_2023.png",
-    "LEC": "https://upload.wikimedia.org/wikipedia/commons/2/2d/Charles_Leclerc_Ferrari_F1_2022.jpg",
-    "NOR": "https://upload.wikimedia.org/wikipedia/commons/3/3f/Lando_Norris_McLaren_2022.jpg",
-}
-
-def render_team_logo(team_name, height=18):
-    url = F1_TEAM_LOGOS.get(team_name)
-    if not url:
-        return team_name
-    return f'<img src="{url}" height="{height}" style="vertical-align:middle;margin-right:0.5em;"> {team_name}'
-
-def render_driver_img(code, name, height=20):
-    url = F1_DRIVER_IMAGES.get(code)
-    if not url:
-        return name
-    return f'<img src="{url}" height="{height}" style="vertical-align:middle;border-radius:12px;"> {name}'
 
 def selecteurs_session():
-    import streamlit as st
-    from streamlit_extras.colored_header import colored_header
+    """
+    Affiche les sélecteurs de session (année, Grand Prix, type) dans la sidebar.
+    
+    Retour
+    ------
+    tuple
+        (année, grand_prix, session_type, loaded)
+    """
     import fastf1
     from datetime import datetime
-
-    colored_header(
-        "Session",
-        description="Sélectionnez la saison, le Grand Prix et le type de session",
-        color_name="blue-70",
-    )
+    from streamlit_extras.colored_header import colored_header
 
     # Préremplir avec dernier choix stocké si dispo, sinon valeurs par défaut
     annee_def = st.session_state.get("annee", datetime.now().year)
@@ -104,6 +68,19 @@ def selecteurs_session():
     )
 
 def selecteur_pilote_unique(pilotes: list[str]):
+    """
+    Affiche un sélecteur pour choisir un seul pilote dans la sidebar.
+    
+    Paramètres
+    ----------
+    pilotes : list[str]
+        Liste des codes pilotes disponibles (ex: ["HAM", "VER", "LEC"]).
+    
+    Retour
+    ------
+    str
+        Le code du pilote sélectionné (par défaut "HAM" si disponible).
+    """
     colored_header(
         "Pilotes",
         description="Choisissez un pilotes",
@@ -122,6 +99,19 @@ def selecteur_pilote_unique(pilotes: list[str]):
     return d1
 
 def selecteurs_pilotes(pilotes: list[str]):
+    """
+    Affiche des sélecteurs pour choisir un ou deux pilotes à comparer.
+    
+    Paramètres
+    ----------
+    pilotes : list[str]
+        Liste des codes pilotes disponibles.
+    
+    Retour
+    ------
+    tuple
+        (pilote_1, pilote_2) où pilote_2 peut être une chaîne vide.
+    """
     colored_header(
         "Pilotes",
         description="Choisissez un ou deux pilotes à comparer",
@@ -145,8 +135,18 @@ def selecteurs_pilotes(pilotes: list[str]):
     return d1, d2
 
 def selections_courantes(required: bool = True):
-    """Récupère (annee, grand_prix, session_type, loaded, pilote 1 et 2) depuis session_state.
-    Si required=True et que ce n'est pas prêt, affiche un message et stoppe la page.
+    """
+    Récupère les sélections courantes depuis session_state.
+    
+    Paramètres
+    ----------
+    required : bool, optionnel
+        Si True, affiche un message et stoppe la page si les données ne sont pas chargées.
+    
+    Retour
+    ------
+    tuple
+        (année, grand_prix, session_type, loaded)
     """
 
     annee = st.session_state.get("annee")

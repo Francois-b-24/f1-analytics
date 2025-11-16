@@ -12,7 +12,29 @@ from matplotlib.collections import LineCollection
 
 @st.cache_data(show_spinner=False)
 def chargement_session(annee: int, course: str, sess_type: str):
-    """ Fonction permettant de charger une session (week-end de GP)"""
+    """
+    Charge une session F1 (week-end de Grand Prix) et retourne les données principales.
+    
+    Paramètres
+    ----------
+    annee : int
+        L'année de la saison (ex: 2024).
+    course : str
+        Le nom du Grand Prix (ex: "Australian Grand Prix").
+    sess_type : str
+        Le type de session ("FP1", "FP2", "FP3", "Q", "R").
+    
+    Retour
+    ------
+    dict
+        Dictionnaire contenant :
+        - session : objet Session FastF1
+        - nom : nom de la session
+        - tours : DataFrame des tours
+        - pilotes : liste des codes pilotes
+        - meteo : DataFrame des données météo
+        - resultats : DataFrame des résultats officiels
+    """
     sess = fastf1.get_session(annee, course, sess_type)
     sess.load()
 
@@ -48,7 +70,23 @@ def chargement_session(annee: int, course: str, sess_type: str):
 
 @st.cache_data(show_spinner=False)
 def tour_rapide_tel(session_key: str, _tours_df: pd.DataFrame, code_pilote: str):
-    """Fonction pour obtenir les informations sur le tour le plus rapide pour un pilote donné"""
+    """
+    Obtient les informations sur le tour le plus rapide d'un pilote donné.
+    
+    Paramètres
+    ----------
+    session_key : str
+        Clé unique de la session (non utilisée actuellement, pour compatibilité cache).
+    _tours_df : pd.DataFrame
+        DataFrame contenant tous les tours de la session.
+    code_pilote : str
+        Code du pilote (ex: "HAM", "VER").
+    
+    Retour
+    ------
+    tuple
+        (Lap object du tour le plus rapide, DataFrame de télémetrie)
+    """
     tours_df = _tours_df.pick_driver(code_pilote)
     plus_rapide = tours_df.pick_fastest()
     tel = plus_rapide.get_car_data().add_distance()
@@ -56,6 +94,22 @@ def tour_rapide_tel(session_key: str, _tours_df: pd.DataFrame, code_pilote: str)
 
 @st.cache_data(show_spinner=True)
 def calcul_classement_pilote(annee: int, upto_event: str) -> pd.DataFrame:
+    """
+    Calcule le classement cumulé des pilotes jusqu'à un événement donné.
+    
+    Paramètres
+    ----------
+    annee : int
+        L'année de la saison.
+    upto_event : str
+        Le nom du Grand Prix jusqu'auquel calculer le classement.
+    
+    Retour
+    ------
+    pd.DataFrame
+        DataFrame avec colonnes : Position, BroadcastName, TeamName, Points.
+        DataFrame vide si erreur ou données indisponibles.
+    """
     try:
         schedule = fastf1.get_event_schedule(annee, include_testing=False)
     except Exception:
@@ -91,6 +145,22 @@ def calcul_classement_pilote(annee: int, upto_event: str) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=True)
 def calcul_classement_constructeur(annee: int, upto_event: str) -> pd.DataFrame:
+    """
+    Calcule le classement cumulé des constructeurs jusqu'à un événement donné.
+    
+    Paramètres
+    ----------
+    annee : int
+        L'année de la saison.
+    upto_event : str
+        Le nom du Grand Prix jusqu'auquel calculer le classement.
+    
+    Retour
+    ------
+    pd.DataFrame
+        DataFrame avec colonnes : Position, TeamName, Points.
+        DataFrame vide si erreur ou données indisponibles.
+    """
     try:
         schedule = fastf1.get_event_schedule(annee, include_testing=False)
     except Exception:
@@ -125,6 +195,24 @@ def calcul_classement_constructeur(annee: int, upto_event: str) -> pd.DataFrame:
     return standings[['Position','TeamName','Points']]
 
 def classement_session(nb_tours: pd.DataFrame, results_df: pd.DataFrame, sess_type: str) -> pd.DataFrame:
+    """
+    Calcule le classement d'une session donnée.
+    
+    Paramètres
+    ----------
+    nb_tours : pd.DataFrame
+        DataFrame contenant les tours de la session.
+    results_df : pd.DataFrame
+        DataFrame contenant les résultats officiels (si disponibles).
+    sess_type : str
+        Type de session ("FP1", "FP2", "FP3", "Q", "R").
+    
+    Retour
+    ------
+    pd.DataFrame
+        DataFrame du classement avec colonnes selon le type de session.
+        DataFrame vide si données insuffisantes.
+    """
     if sess_type == 'R' and not results_df.empty and 'Position' in results_df:
         cols = [c for c in ["Position","BroadcastName","DriverNumber","TeamName","TeamColor","Points","Status","Time","FastestLapTime"] if c in results_df.columns]
         df = results_df[cols].copy()

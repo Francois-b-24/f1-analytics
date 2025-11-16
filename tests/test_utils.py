@@ -22,3 +22,4 @@ def test_secs_nan():
 def test_secs_standard():
     td = pd.Timedelta('0 days 00:02:05.123')
     assert abs(secs(td) - 125.123) < 1e-3
+

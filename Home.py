@@ -5,29 +5,29 @@ from scr.data import chargement_session
 from scr.utils import formatage_timedelta
 import plotly.express as px
 import pandas as pd
-from streamlit_extras.metric_cards import style_metric_cards
 from streamlit_extras.colored_header import colored_header
 from streamlit_extras.add_vertical_space import add_vertical_space
 
 
-
 configure_page_home("F1 Analytics – Home")
 
-
+# Import du thème CSS sobre et adaptatif
+with open("f1_theme.css") as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 st.markdown(
     """
     <div style="text-align:center; font-size: 1.5em; font-weight: 500;">
-        <span class="f1-glow">🏎️ F1 Analytics</span>
+        <span class="f1-glow"><span class="f1-car-emoji">🏎️</span> F1 Analytics</span>
     </div>
     """,
     unsafe_allow_html=True
 )
 
-# Splash phrase racing paddock (gris sobre)
+# Citation Lewis Hamilton
 st.markdown(
-    '<div style="text-align:center;font-size:1.2em;color:#e9ecef;padding-top:0.7em;padding-bottom:0.5em;font-family:Orbitron,Arial Black,Arial">'
-    '"Still I Rise" <span style="color:#adb5bd;font-size:0.7em;">– Lewis Hamilton</span>'
+    '<div class="citation" style="text-align:center;font-size:1.1em;padding-top:0.7em;padding-bottom:0.5em;">'
+    '« STILL I RISE » <span style="font-size:0.85em;">– Lewis Hamilton</span>'
     '</div>',
     unsafe_allow_html=True
 )
@@ -42,7 +42,7 @@ st.session_state["loaded"] = loaded
 
 
 if not loaded:
-    st.info("Sélectionnez une saison, un Grand Prix et un type de session, puis cliquez **Charger** les données et parcourez les pages.")
+    st.info("Sélectionnez une année, un Grand Prix et un type de session, puis **Charger**")
     st.stop()
 
 # Chargement du WEEK-END de Grand prix
@@ -61,12 +61,7 @@ except Exception as e:
     st.stop()
 
 
-style_metric_cards(background_color = "#FFFFFF", border_color="#2B313E", border_left_color="#00D4FF", border_radius_px=8, box_shadow=True)
-
-# Import du thème CSS racing paddock premium
-with open("f1_theme.css") as f:
-    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
+# Les métriques utilisent maintenant le thème CSS adaptatif
 
 colored_header("Overview", description=None, color_name="blue-70")
 # KPIs

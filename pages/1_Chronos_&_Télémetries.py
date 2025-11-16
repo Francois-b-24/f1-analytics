@@ -4,10 +4,9 @@ from scr.config import configure_page
 from scr.ui import selecteurs_pilotes, selections_courantes
 from scr.data import chargement_session, tour_rapide_tel
 from scr.utils import formatage_timedelta
-from streamlit_extras.metric_cards import style_metric_cards
+
 from streamlit_extras.colored_header import colored_header
-from streamlit_extras.chart_container import chart_container
-from streamlit_extras.add_vertical_space import add_vertical_space
+
 
 with open("f1_theme.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -44,7 +43,19 @@ else:
     st.info("Données de tours insuffisantes.")
 
 def _get_best_lap_no(d):
-    """Retourne le numéro du tour du meilleur tour depuis d1_fast/d2_fast."""
+    """
+    Retourne le numéro du tour du meilleur tour depuis un objet Lap.
+    
+    Paramètres
+    ----------
+    d : dict ou objet Lap
+        Objet contenant les informations d'un tour.
+    
+    Retour
+    ------
+    int | None
+        Le numéro du tour ou None si non trouvé.
+    """
     try:
         for key in ("LapNumber", "Lap", "BestLapNo", "BestLap"):
             try:
