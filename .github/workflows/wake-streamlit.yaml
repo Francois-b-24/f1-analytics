@@ -1,4 +1,3 @@
-# .github/workflows/keep-alive.yml
 name: Trigger keep-alive probe for Streamlit app
 
 on:
