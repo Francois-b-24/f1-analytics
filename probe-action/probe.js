@@ -6,7 +6,7 @@ const TARGET_URLS = [
   "https://watchanalytics.streamlit.app/",
 ];
 
-const WAKE_UP_BUTTON_TEXT = "app back up";
+const WAKE_UP_BUTTON_TEXT = "Yes, get this app back up!";
 const PAGE_LOAD_GRACE_PERIOD_MS = 8000;
 
 console.log(process.version);
