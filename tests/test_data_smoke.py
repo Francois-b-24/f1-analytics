@@ -10,3 +10,4 @@ def test_chargement_session_smoke():
     except Exception:
         pytest.skip('Aucune data disponible ou absence de connexion pour FastF1 (test smoke).')
 
+
