@@ -4,6 +4,7 @@ const puppeteer = require('puppeteer');
 const TARGET_URLS = [
   "https://f1-fastanalytics.streamlit.app/",
   "https://watchanalytics.streamlit.app/",
+  "https://assettracket.streamlit.app/",
 ];
 
 // On cherche un morceau de texte suffisamment distinctif du bouton
