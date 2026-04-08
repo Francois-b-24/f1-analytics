@@ -9,9 +9,6 @@ from streamlit_extras.colored_header import colored_header
 configure_page("F1 Analytics – Cartographie")
 st.subheader("Cartographie")
 
-with open("f1_theme.css") as f:
-    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 if not loaded:
     st.warning("Aucune session n'est chargée. Retournez à la page d'accueil.")

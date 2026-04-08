@@ -6,37 +6,28 @@ from scr.config import configure_page
 from scr.ui import selections_courantes
 from scr.data import chargement_session
 
-with open("f1_theme.css") as f:
-    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
 configure_page("F1 Analytics – Météo")
 
 st.subheader("Données météo de la session")
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 
-data = chargement_session(annee, grand_prix, session_type)
-tours = data["tours"]
-pilotes = data["pilotes"]
-
 if not loaded:
     st.info("Charge d’abord une session depuis la page Home")
     st.stop()
 
 data = chargement_session(annee, grand_prix, session_type)
-meteo = data['meteo']
+meteo = data["meteo"]
 
 if not meteo.empty:
     st.dataframe(meteo, use_container_width=True)
     xcol = 'SessionTimeSec' if 'SessionTimeSec' in meteo else 'Time'
     # --- KPI : Écart moyen entre la température piste et air ---
     if 'AirTemp' in meteo and 'TrackTemp' in meteo:
-        try:
-            diff = meteo['TrackTemp'] - meteo['AirTemp']
-            mean_diff = float(diff.mean(skipna=True))
+        diff = meteo['TrackTemp'] - meteo['AirTemp']
+        mean_diff = float(diff.mean(skipna=True))
+        if not (mean_diff != mean_diff):  # NaN check
             st.metric("Écart moyen piste - air", f"{mean_diff:.1f} °C")
-        except Exception:
-            pass
 
     temp = ('AirTemp' in meteo) or ('TrackTemp' in meteo)
 

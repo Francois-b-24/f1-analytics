@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pandas as pd
 import streamlit as st
 import fastf1
@@ -9,6 +11,35 @@ import fastf1.plotting
 import numpy as np
 import matplotlib as mpl
 from matplotlib.collections import LineCollection
+
+logger = logging.getLogger("f1_analytics.data")
+
+
+def _select_lap(laps: pd.DataFrame, lap_number: int | None):
+    """
+    Sélectionne un objet Lap unique depuis un DataFrame de tours FastF1.
+
+    - Si `lap_number` est fourni, retourne ce tour (fallback sur le plus rapide si absent).
+    - Sinon retourne le tour le plus rapide.
+
+    Préserve le type `fastf1.core.Lap` nécessaire à `get_telemetry()` / `get_pos_data()`.
+    """
+    if laps is None or laps.empty:
+        return None
+    if lap_number is not None:
+        subset = laps[laps["LapNumber"] == lap_number]
+        if subset is not None and not subset.empty:
+            try:
+                # pick_fastest sur un sous-ensemble d'une seule ligne renvoie
+                # bien un objet Lap typé (et non une pd.Series).
+                return subset.pick_fastest()
+            except Exception as exc:
+                logger.debug("pick_fastest(subset) a échoué: %s", exc)
+    try:
+        return laps.pick_fastest()
+    except Exception as exc:
+        logger.warning("pick_fastest(laps) a échoué: %s", exc)
+        return None
 
 @st.cache_data(show_spinner=False)
 def chargement_session(annee: int, course: str, sess_type: str):
@@ -51,12 +82,14 @@ def chargement_session(annee: int, course: str, sess_type: str):
         meteo = sess.weather_data.copy().reset_index(drop=True)
         if 'Time' in meteo:
             meteo['SessionTimeSec'] = meteo['Time'].apply(secs)
-    except Exception:
+    except Exception as exc:
+        logger.info("Données météo indisponibles: %s", exc)
         meteo = pd.DataFrame()
 
     try:
         results = sess.results.copy().reset_index(drop=True)
-    except Exception:
+    except Exception as exc:
+        logger.info("Résultats officiels indisponibles: %s", exc)
         results = pd.DataFrame()
 
     return dict(
@@ -377,30 +410,28 @@ def figure_carte_vitesse(sess,
         ax.axis('off')
         return fig
 
-    if lap_number is not None:
-        lap = laps.loc[laps['LapNumber'] == lap_number]
-        if lap is None or lap.empty:
-            # fallback sur le plus rapide
-            lap = laps.pick_fastest()
-        else:
-            # lap est un DataFrame d'une seule ligne -> convertir en Lap object
-            lap = lap.iloc[0]
-    else:
-        lap = laps.pick_fastest()
+    lap = _select_lap(laps, lap_number)
+    if lap is None:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        fig.patch.set_facecolor('white')
+        ax.set_facecolor('white')
+        ax.text(0.5, 0.5, "Tour indisponible", ha='center', va='center')
+        ax.axis('off')
+        return fig
 
-    # Télémetrie avec position XY et vitesse (peut être get_telemetry selon version FastF1)
+    # Télémetrie avec position XY et vitesse
     try:
         tel = lap.get_telemetry()
-    except Exception:
-        # compatibilité avec anciens attributs
+    except Exception as exc:
+        logger.warning("get_telemetry a échoué (%s), fallback attribut legacy", exc)
         tel = getattr(lap, 'telemetry', None)
-        if tel is None:
-            fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-            fig.patch.set_facecolor('white')
-            ax.set_facecolor('white')
-            ax.text(0.5, 0.5, "Télémetrie indisponible", ha='center', va='center')
-            ax.axis('off')
-            return fig
+    if tel is None or len(tel) == 0:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        fig.patch.set_facecolor('white')
+        ax.set_facecolor('white')
+        ax.text(0.5, 0.5, "Télémetrie indisponible", ha='center', va='center')
+        ax.axis('off')
+        return fig
 
     # Variables de tracé
     x = tel['X']
@@ -521,27 +552,28 @@ def figure_carte_rapports(sess,
         ax.axis('off')
         return fig
 
-    if lap_number is not None:
-        lap = laps.loc[laps['LapNumber'] == lap_number]
-        if lap is None or lap.empty:
-            lap = laps.pick_fastest()
-        else:
-            lap = lap.iloc[0]
-    else:
-        lap = laps.pick_fastest()
+    lap = _select_lap(laps, lap_number)
+    if lap is None:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        fig.patch.set_facecolor('white')
+        ax.set_facecolor('white')
+        ax.text(0.5, 0.5, "Tour indisponible", ha='center', va='center')
+        ax.axis('off')
+        return fig
 
     # Télémetrie et données
     try:
         tel = lap.get_telemetry()
-    except Exception:
+    except Exception as exc:
+        logger.warning("get_telemetry (rapports) a échoué (%s), fallback legacy", exc)
         tel = getattr(lap, 'telemetry', None)
-        if tel is None:
-            fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-            fig.patch.set_facecolor('white')
-            ax.set_facecolor('white')
-            ax.text(0.5, 0.5, "Télémetrie indisponible", ha='center', va='center')
-            ax.axis('off')
-            return fig
+    if tel is None or len(tel) == 0:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        fig.patch.set_facecolor('white')
+        ax.set_facecolor('white')
+        ax.text(0.5, 0.5, "Télémetrie indisponible", ha='center', va='center')
+        ax.axis('off')
+        return fig
 
     x = np.array(tel['X'].values)
     y = np.array(tel['Y'].values)
@@ -675,19 +707,20 @@ def figure_carte_virages(sess,
         ax.axis('off')
         return fig
 
-    if lap_number is not None:
-        lap = laps.loc[laps['LapNumber'] == lap_number]
-        if lap is None or lap.empty:
-            lap = laps.pick_fastest()
-        else:
-            lap = lap.iloc[0]
-    else:
-        lap = laps.pick_fastest()
+    lap = _select_lap(laps, lap_number)
+    if lap is None:
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        fig.patch.set_facecolor('white')
+        ax.set_facecolor('white')
+        ax.text(0.5, 0.5, "Tour indisponible", ha='center', va='center')
+        ax.axis('off')
+        return fig
 
     # Position et infos circuit
     try:
         pos = lap.get_pos_data()
-    except Exception:
+    except Exception as exc:
+        logger.warning("get_pos_data a échoué: %s", exc)
         pos = None
     try:
         circuit_info = sess.get_circuit_info()

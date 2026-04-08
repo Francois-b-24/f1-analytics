@@ -3,9 +3,6 @@ from scr.config import configure_page
 from scr.data import figure_positions_par_tour, chargement_session
 from scr.ui import selections_courantes
 
-with open("f1_theme.css") as f:
-    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
 configure_page("F1 Analytics – Performances")
 
 st.subheader("Performances")

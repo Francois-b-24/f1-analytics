@@ -11,10 +11,6 @@ from streamlit_extras.add_vertical_space import add_vertical_space
 
 configure_page_home("F1 Analytics – Home")
 
-# Import du thème CSS sobre et adaptatif
-with open("f1_theme.css") as f:
-    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
 st.markdown(
     """
     <div style="text-align:center; font-size: 1.5em; font-weight: 500;">
@@ -34,11 +30,8 @@ st.markdown(
 
 
 sidebar_hint_once()
-annee, grand_prix, session_type, loaded, = selecteurs_session()
-st.session_state["annee"] = annee
-st.session_state["grand_prix"] = grand_prix
-st.session_state["session_type"] = session_type
-st.session_state["loaded"] = loaded
+# selecteurs_session() gère déjà la persistance dans st.session_state
+annee, grand_prix, session_type, loaded = selecteurs_session()
 
 
 if not loaded:

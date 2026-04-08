@@ -67,36 +67,31 @@ def selecteurs_session():
         st.session_state.get("loaded", False),
     )
 
-def selecteur_pilote_unique(pilotes: list[str]):
+def selecteur_pilote_unique(pilotes: list[str]) -> str:
     """
     Affiche un sélecteur pour choisir un seul pilote dans la sidebar.
-    
-    Paramètres
-    ----------
-    pilotes : list[str]
-        Liste des codes pilotes disponibles (ex: ["HAM", "VER", "LEC"]).
-    
+
     Retour
     ------
     str
-        Le code du pilote sélectionné (par défaut "HAM" si disponible).
+        Le code du pilote sélectionné, ou "" si aucun pilote disponible.
     """
     colored_header(
-        "Pilotes",
-        description="Choisissez un pilotes",
+        "Pilote",
+        description="Choisissez un pilote",
         color_name="blue-70",
     )
-    # Par défaut, HAM si dispo sinon premier pilote
-    default = "HAM" if "HAM" in pilotes else (pilotes[0] if pilotes else "")
-    if pilotes:
-        st.selectbox("Pilote", pilotes, index=pilotes.index(default) if default in pilotes else 0, key="drv1_sidebar_")
-    else:
+    if not pilotes:
         st.caption("Aucun pilote disponible")
+        return ""
 
-    d1 = st.session_state.get("drv1_sidebar_", default)
-    if d1 == "" :
-        d1 = ""
-    return d1
+    default = "HAM" if "HAM" in pilotes else pilotes[0]
+    return st.selectbox(
+        "Pilote",
+        pilotes,
+        index=pilotes.index(default),
+        key="drv1_sidebar_",
+    )
 
 def selecteurs_pilotes(pilotes: list[str]):
     """
