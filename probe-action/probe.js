@@ -6,6 +6,7 @@ const TARGET_URLS = [
   "https://watchanalytics.streamlit.app/",
   "https://assettracket.streamlit.app/",
   "https://insuranalytics.streamlit.app/",
+  "https://gaboneselaw.streamlit.app/",
 ];
 
 // On cherche un morceau de texte suffisamment distinctif du bouton
