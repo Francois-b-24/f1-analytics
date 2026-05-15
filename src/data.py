@@ -163,13 +163,53 @@ def _get_or_reload_session(annee: int, course: str, sess_type: str):
     return sess
 
 
+def _extract_best_lap_tel(sess, driver_codes: list[str]) -> dict[str, pd.DataFrame]:
+    """Extrait la télémétrie du meilleur tour de chaque pilote pendant que
+    la session est encore en mémoire avec ses attributs _car_data/_pos_data.
+
+    Retourne un dict {code_pilote: DataFrame} avec les colonnes
+    Distance, Speed, X, Y, nGear — tout en DataFrames pandas purs,
+    sérialisables proprement par Streamlit cache_data.
+
+    On extrait ici, lors du chargement initial, pour ne plus jamais dépendre
+    de lap.session plus tard (qui peut pointer vers une instance dégradée).
+    """
+    result: dict[str, pd.DataFrame] = {}
+    for drv in driver_codes:
+        try:
+            laps = sess.laps.pick_drivers(drv)
+            lap = _select_lap(laps, lap_number=None)
+            if lap is None:
+                continue
+            # car_data : Speed, RPM, nGear, Brake, Throttle
+            car = lap.get_car_data().add_distance()
+            # pos_data : X, Y, Z
+            pos = lap.get_pos_data()
+            # Merge sur Date (index temporel commun)
+            car = car.reset_index(drop=True)
+            pos = pos.reset_index(drop=True)
+            # Garde les colonnes utiles et merge sur la distance/ordre
+            cols_car = [c for c in ("Distance", "Speed", "nGear", "Brake", "Throttle") if c in car.columns]
+            cols_pos = [c for c in ("X", "Y") if c in pos.columns]
+            # Normalise les longueurs (car et pos peuvent différer légèrement)
+            n = min(len(car), len(pos))
+            merged = car[cols_car].iloc[:n].copy()
+            for c in cols_pos:
+                merged[c] = pos[c].iloc[:n].values
+            result[drv] = merged.reset_index(drop=True)
+        except Exception as exc:
+            logger.debug("Télémétrie indisponible pour %s: %s", drv, exc)
+    return result
+
+
 @st.cache_data(show_spinner="Chargement de la session F1…", max_entries=4, ttl=3600)
 def _chargement_dataframes(annee: int, course: str, sess_type: str):
-    """Charge les DataFrames sérialisables (tours, météo, résultats).
+    """Charge tous les DataFrames sérialisables en une passe pendant que la
+    session est fraîche en mémoire : tours, météo, résultats, et télémétrie
+    du meilleur tour par pilote.
 
-    Ces données sont stables et cachables proprement par Streamlit
-    (pickle DataFrame). L'objet Session live, lui, est obtenu séparément
-    via `_get_or_reload_session` pour éviter les pertes d'attributs.
+    Tout est extrait ici pour ne plus jamais avoir besoin de rouvrir
+    lap.session (qui peut être dégradé par le cache Streamlit).
     """
     sess = _build_session(annee, course, sess_type)
 
@@ -196,18 +236,39 @@ def _chargement_dataframes(annee: int, course: str, sess_type: str):
         logger.info("Résultats officiels indisponibles: %s", exc)
         results = pd.DataFrame()
 
-    nom = sess.name
-    # On garde la session en session_state pour réutilisation par les viz
+    # Extraction télémétrie pendant que la session est fraîche
+    tel_par_pilote = _extract_best_lap_tel(sess, driver_codes)
+    logger.info("Télémétrie extraite pour %d/%d pilotes", len(tel_par_pilote), len(driver_codes))
+
+    # Meilleur tour par pilote (LapTime + LapNumber) — stocké pour l'UI
+    best_laps: dict[str, dict] = {}
+    for drv in driver_codes:
+        try:
+            laps_drv = tours[tours['Driver'] == drv].dropna(subset=['LapTime'])
+            if laps_drv.empty:
+                continue
+            idx = laps_drv['LapTime'].idxmin()
+            row = laps_drv.loc[idx]
+            best_laps[drv] = {
+                'LapTime': row['LapTime'],
+                'LapNumber': int(row['LapNumber']) if pd.notna(row.get('LapNumber')) else None,
+            }
+        except Exception:
+            pass
+
+    # On garde la session en session_state pour les viz matplotlib
     key = f"_f1_sess_{annee}_{course}_{sess_type}"
     st.session_state[key] = sess
 
     logger.info("Session chargée: %d tours, %d pilotes", len(tours), len(driver_codes))
     return dict(
-        nom=nom,
+        nom=sess.name,
         tours=tours,
         pilotes=driver_codes,
         meteo=meteo,
         resultats=results,
+        tel_par_pilote=tel_par_pilote,
+        best_laps=best_laps,
     )
 
 
@@ -246,62 +307,40 @@ def chargement_session(annee: int, course: str, sess_type: str):
 # Expose .clear() comme avant pour Home.py (bouton "Réessayer")
 chargement_session.clear = _chargement_dataframes.clear
 
-def tour_rapide_tel(_sess, code_pilote: str):
+def tour_rapide_tel(data: dict, code_pilote: str):
     """
-    Obtient le tour le plus rapide d'un pilote et sa télémétrie.
+    Retourne les infos du meilleur tour et sa télémétrie pour un pilote.
 
-    IMPORTANT : prend l'objet Session FastF1 (pas un DataFrame détaché),
-    car `Lap.get_car_data()` a besoin du pointeur vers la session pour
-    accéder à `session.car_data` chargé en mémoire. Passer un DataFrame
-    copié (sess.laps.copy().reset_index()) brise ce lien et lève
-    `DataNotLoadedError`.
+    Utilise les données pré-extraites dans `data` (retour de
+    `chargement_session`) — plus aucun accès à `lap.session` ou
+    `Session.car_data`, ce qui évitait le DataNotLoadedError persistant.
 
     Paramètres
     ----------
-    _sess : fastf1.core.Session
-        Session FastF1 chargée. Le préfixe `_` désactive le hash Streamlit
-        (Session n'est pas hashable proprement).
+    data : dict
+        Retour de `chargement_session` (contient `tel_par_pilote`, `best_laps`).
     code_pilote : str
-        Code 3-lettres (ex: "HAM", "VER") ou numéro.
+        Code 3-lettres (ex: "HAM", "VER").
 
     Retour
     ------
-    tuple[fastf1.core.Lap, pd.DataFrame]
-        Le tour le plus rapide et la télémétrie avec colonne `Distance`.
+    tuple[dict, pd.DataFrame]
+        (infos meilleur tour {LapTime, LapNumber}, DataFrame télémétrie).
 
     Raises
     ------
     ValueError
-        Si aucun tour valide n'est trouvé pour le pilote.
+        Si aucune télémétrie disponible pour ce pilote.
     """
-    # Garantit que _car_data est en mémoire (sinon get_car_data crash)
-    _ensure_session_loaded(_sess)
+    tel_par_pilote = data.get("tel_par_pilote", {})
+    best_laps = data.get("best_laps", {})
 
-    laps = _sess.laps.pick_drivers(code_pilote)
-    if laps is None or len(laps) == 0:
-        raise ValueError(f"Aucun tour pour le pilote {code_pilote}")
+    tel = tel_par_pilote.get(code_pilote)
+    if tel is None or len(tel) == 0:
+        raise ValueError(f"Télémétrie indisponible pour {code_pilote}")
 
-    lap = _select_lap(laps, lap_number=None)
-    if lap is None:
-        raise ValueError(f"Aucun tour valide pour {code_pilote} (LapTime tous NaN ?)")
-
-    # `lap.session` peut pointer vers une instance dont _car_data n'est pas
-    # chargé (cache Streamlit, GC, héritage _metadata de pandas). Reload
-    # en place si nécessaire.
-    try:
-        _ensure_session_loaded(lap.session)
-    except Exception as exc:
-        logger.warning("Reload via lap.session a échoué: %s", exc)
-
-    try:
-        tel = lap.get_car_data().add_distance()
-    except DataNotLoadedError:
-        # Dernier recours : force un reload complet de la session du lap
-        logger.warning("get_car_data DataNotLoadedError — force reload session")
-        lap.session.load()
-        tel = lap.get_car_data().add_distance()
-
-    return lap, tel
+    best = best_laps.get(code_pilote, {})
+    return best, tel
 
 def _round_upto(annee: int, upto_event: str) -> int | None:
     """Retourne le numéro de manche (1-based) correspondant à `upto_event`."""
@@ -609,9 +648,7 @@ def figure_positions_par_tour(sess, pilotes=None):
 
 
 @_safe_figure
-def figure_carte_vitesse(sess,
-                         pilote,
-                         lap_number: int | None = None,
+def figure_carte_vitesse(tel: pd.DataFrame,
                          cmap=mpl.cm.plasma,
                          figsize=(12, 6.75),
                          dpi=100,
@@ -646,258 +683,101 @@ def figure_carte_vitesse(sess,
     ------
     matplotlib.figure.Figure
     """
-    _ensure_session_loaded(sess)
-
-    # Résoudre l'abréviation depuis BroadcastName/numéro si nécessaire
-    drv_identifier = pilote
-    try:
-        res = getattr(sess, "results", None)
-        if res is not None and not res.empty:
-            if isinstance(pilote, str) and 'BroadcastName' in res.columns and 'Abbreviation' in res.columns:
-                m = dict(zip(res['BroadcastName'], res['Abbreviation']))
-                drv_identifier = m.get(pilote, pilote)
-            if 'DriverNumber' in res.columns and 'Abbreviation' in res.columns:
-                mnum = dict(zip(res['DriverNumber'].astype(str), res['Abbreviation']))
-                drv_identifier = mnum.get(str(drv_identifier), drv_identifier)
-    except Exception:
-        pass
-
-    # Récupérer le tour
-    try:
-        laps = sess.laps.pick_drivers(drv_identifier)
-    except Exception as exc:
-        logger.exception("pick_drivers(%s) a échoué", drv_identifier)
-        return _err_figure(f"Pilote introuvable : {drv_identifier}\n{type(exc).__name__}: {exc}", figsize=figsize, dpi=dpi)
-
-    if laps is None or len(laps) == 0:
-        return _err_figure(f"Aucun tour pour le pilote {drv_identifier}", figsize=figsize, dpi=dpi)
-
-    lap = _select_lap(laps, lap_number)
-    if lap is None:
-        return _err_figure(f"Tour indisponible pour {drv_identifier}", figsize=figsize, dpi=dpi)
-
-    # Télémétrie
-    try:
-        tel = lap.get_telemetry()
-    except Exception as exc:
-        logger.exception("get_telemetry a échoué pour %s", drv_identifier)
-        return _err_figure(f"Télémétrie indisponible : {type(exc).__name__}: {exc}", figsize=figsize, dpi=dpi)
-
     if tel is None or len(tel) == 0:
-        return _err_figure(f"Télémétrie vide pour {drv_identifier}", figsize=figsize, dpi=dpi)
-
+        return _err_figure("Télémétrie vide", figsize=figsize, dpi=dpi)
     if not all(c in tel.columns for c in ("X", "Y", "Speed")):
-        return _err_figure("Colonnes X/Y/Speed manquantes dans la télémétrie", figsize=figsize, dpi=dpi)
+        return _err_figure("Colonnes X/Y/Speed manquantes", figsize=figsize, dpi=dpi)
 
-    # Variables de tracé
-    x = tel['X']
-    y = tel['Y']
-    speed = tel['Speed']
+    x = np.asarray(tel['X'], dtype=float)
+    y = np.asarray(tel['Y'], dtype=float)
+    speed = np.asarray(tel['Speed'], dtype=float)
 
-    # Segments colorés
     points = np.array([x, y]).T.reshape(-1, 1, 2)
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
 
     fig, ax = plt.subplots(sharex=True, sharey=True, figsize=figsize, dpi=dpi)
     fig.patch.set_facecolor('#0d1117')
     ax.set_facecolor('#0d1117')
-
-    # Titre
-    try:
-        gp_name = sess.event.name
-        year = int(sess.event.year)
-    except Exception:
-        gp_name, year = sess.name, ''
-    title_id = drv_identifier
-    try:
-        # Utiliser BroadcastName si dispo pour le titre, sinon abréviation
-        res = getattr(sess, "results", None)
-        if res is not None and not res.empty and 'Abbreviation' in res and 'BroadcastName' in res:
-            inv = dict(zip(res['Abbreviation'], res['BroadcastName']))
-            title_id = inv.get(str(drv_identifier), str(drv_identifier))
-    except Exception:
-        pass
-    fig.suptitle(f"{gp_name} {year} – {title_id} – Vitesse", size=18, y=0.97, color="#e6edf3")
-
-    # Marges et axes
-    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.12)
     ax.axis('off')
 
-    # Ligne de fond (piste) — gris foncé pour rester visible sur fond anthracite
-    ax.plot(x, y, color='#30363d', linestyle='-', linewidth=linewidth_track, zorder=0)
-
-    # Ligne colorée par la vitesse
+    ax.plot(x, y, color='#30363d', linewidth=linewidth_track, zorder=0)
     norm = plt.Normalize(speed.min(), speed.max())
-    lc = LineCollection(segments, cmap=cmap, norm=norm, linestyle='-', linewidth=linewidth_speed)
+    lc = LineCollection(segments, cmap=cmap, norm=norm, linewidth=linewidth_speed)
     lc.set_array(speed)
     ax.add_collection(lc)
-
-    # Ajustement des limites (LineCollection ne le fait pas seul)
     ax.set_xlim(x.min(), x.max())
     ax.set_ylim(y.min(), y.max())
     ax.set_aspect('equal')
 
-    # Barre de couleurs
     if show_colorbar:
         cbaxes = fig.add_axes([0.25, 0.05, 0.5, 0.04])
-        normlegend = mpl.colors.Normalize(vmin=float(speed.min()), vmax=float(speed.max()))
-        cb = mpl.colorbar.ColorbarBase(cbaxes, norm=normlegend, cmap=cmap, orientation="horizontal")
+        cb = mpl.colorbar.ColorbarBase(cbaxes,
+                                       norm=mpl.colors.Normalize(speed.min(), speed.max()),
+                                       cmap=cmap, orientation="horizontal")
         cb.set_label("Vitesse (km/h)", color="#e6edf3")
         cb.ax.tick_params(colors="#e6edf3")
         cb.outline.set_edgecolor("#30363d")
-
     return fig
 
 
-# --- Visualisation des rapports engagés (nGear) le long de la trajectoire ---
+# --- Visualisation des rapports engagés (nGear) ---
 @_safe_figure
-def figure_carte_rapports(sess,
-                           pilote,
-                           lap_number: int | None = None,
+def figure_carte_rapports(tel: pd.DataFrame,
                            cmap=None,
                            figsize=(12, 6.75),
                            dpi=100,
                            linewidth_track: float = 16,
                            linewidth_gears: float = 4,
                            show_colorbar: bool = True):
-    """
-    Visualisation des rapports engagés (nGear) le long de la trajectoire.
+    """Visualisation des rapports engagés le long de la trajectoire.
 
     Paramètres
     ----------
-    sess : fastf1.core.Session
-        Session FastF1 déjà chargée.
-    pilote : str | int
-        Identifiant pilote (abréviation 3 lettres, numéro ou BroadcastName).
-    lap_number : int | None
-        Numéro de tour à tracer. Si None, utilise le tour le plus rapide.
-    cmap : matplotlib colormap | None
-        Colormap utilisée. Par défaut 'Paired'.
-    figsize : tuple[float, float]
-        Taille de la figure en pouces.
-    dpi : int
-        Résolution de la figure.
-    linewidth_track : float
-        Épaisseur de la ligne de fond (piste).
-    linewidth_gears : float
-        Épaisseur de la ligne colorée par le rapport engagé.
-    show_colorbar : bool
-        Afficher la barre de couleurs.
-
-    Retour
-    ------
-    matplotlib.figure.Figure
+    tel : pd.DataFrame
+        Télémétrie pré-extraite (colonnes X, Y, nGear).
     """
-    _ensure_session_loaded(sess)
-
-    # Choix de la colormap
     if cmap is None:
         cmap = mpl.colormaps['Paired']
 
-    # Résoudre l'identifiant pilote (comme dans figure_carte_vitesse)
-    drv_identifier = pilote
-    try:
-        res = getattr(sess, "results", None)
-        if res is not None and not res.empty:
-            if isinstance(pilote, str) and 'BroadcastName' in res.columns and 'Abbreviation' in res.columns:
-                m = dict(zip(res['BroadcastName'], res['Abbreviation']))
-                drv_identifier = m.get(pilote, pilote)
-            if 'DriverNumber' in res.columns and 'Abbreviation' in res.columns:
-                mnum = dict(zip(res['DriverNumber'].astype(str), res['Abbreviation']))
-                drv_identifier = mnum.get(str(drv_identifier), drv_identifier)
-    except Exception:
-        pass
-
-    # Sélection du tour
-    try:
-        laps = sess.laps.pick_drivers(drv_identifier)
-    except Exception as exc:
-        logger.exception("pick_drivers(%s) a échoué (rapports)", drv_identifier)
-        return _err_figure(f"Pilote introuvable : {drv_identifier}\n{type(exc).__name__}: {exc}", figsize=figsize, dpi=dpi)
-
-    if laps is None or len(laps) == 0:
-        return _err_figure(f"Aucun tour pour le pilote {drv_identifier}", figsize=figsize, dpi=dpi)
-
-    lap = _select_lap(laps, lap_number)
-    if lap is None:
-        return _err_figure(f"Tour indisponible pour {drv_identifier}", figsize=figsize, dpi=dpi)
-
-    # Télémétrie
-    try:
-        tel = lap.get_telemetry()
-    except Exception as exc:
-        logger.exception("get_telemetry (rapports) a échoué pour %s", drv_identifier)
-        return _err_figure(f"Télémétrie indisponible : {type(exc).__name__}: {exc}", figsize=figsize, dpi=dpi)
-
     if tel is None or len(tel) == 0:
-        return _err_figure(f"Télémétrie vide pour {drv_identifier}", figsize=figsize, dpi=dpi)
-
+        return _err_figure("Télémétrie vide", figsize=figsize, dpi=dpi)
     if not all(c in tel.columns for c in ("X", "Y", "nGear")):
-        return _err_figure("Colonnes X/Y/nGear manquantes dans la télémétrie", figsize=figsize, dpi=dpi)
+        return _err_figure("Colonnes X/Y/nGear manquantes", figsize=figsize, dpi=dpi)
 
-    x = np.array(tel['X'].values)
-    y = np.array(tel['Y'].values)
+    x = np.asarray(tel['X'], dtype=float)
+    y = np.asarray(tel['Y'], dtype=float)
+    gear = np.asarray(tel['nGear'], dtype=float)
 
     points = np.array([x, y]).T.reshape(-1, 1, 2)
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
 
-    # nGear en float pour colormap et bornes 1..9 (boîtes 1..8 habituellement)
-    gear = tel['nGear'].to_numpy().astype(float)
-
-    # Figure
     fig, ax = plt.subplots(sharex=True, sharey=True, figsize=figsize, dpi=dpi)
     fig.patch.set_facecolor('#0d1117')
     ax.set_facecolor('#0d1117')
 
-    # Titre
-    try:
-        gp_name = sess.event.name
-        year = int(sess.event.year)
-    except Exception:
-        gp_name, year = sess.name, ''
-    title_id = drv_identifier
-    try:
-        res = getattr(sess, "results", None)
-        if res is not None and not res.empty and 'Abbreviation' in res and 'BroadcastName' in res:
-            inv = dict(zip(res['Abbreviation'], res['BroadcastName']))
-            title_id = inv.get(str(drv_identifier), str(drv_identifier))
-    except Exception:
-        pass
-    fig.suptitle(f"{gp_name} {year} – {title_id} – Rapports", size=18, y=0.97, color="#e6edf3")
-
-    # Fond de piste — gris foncé pour rester visible sur fond anthracite
-    ax.plot(x, y, color='#30363d', linestyle='-', linewidth=linewidth_track, zorder=0)
-
-    # Collection de lignes colorées par rapport
-    lc = LineCollection(segments, norm=plt.Normalize(1, cmap.N + 1), cmap=cmap)
+    ax.plot(x, y, color='#30363d', linewidth=linewidth_track, zorder=0)
+    lc = LineCollection(segments, norm=plt.Normalize(1, cmap.N + 1), cmap=cmap, linewidth=linewidth_gears)
     lc.set_array(gear)
-    lc.set_linewidth(linewidth_gears)
     ax.add_collection(lc)
-
-    # Aspect & axes — set_xlim/set_ylim avant axis('off')
     ax.set_xlim(x.min(), x.max())
     ax.set_ylim(y.min(), y.max())
     ax.set_aspect('equal')
     ax.axis('off')
 
-    # Colorbar (ticks centrés sur chaque couleur)
     if show_colorbar:
-        cbar = plt.colorbar(mappable=lc, ax=ax, label="Rapport", boundaries=np.arange(1, 10), fraction=0.046, pad=0.04)
+        cbar = plt.colorbar(mappable=lc, ax=ax, boundaries=np.arange(1, 10), fraction=0.046, pad=0.04)
         cbar.set_ticks(np.arange(1.5, 9.5))
         cbar.set_ticklabels(np.arange(1, 9))
         cbar.set_label("Rapport", color="#e6edf3")
         cbar.ax.tick_params(colors="#e6edf3")
         cbar.outline.set_edgecolor("#30363d")
-
     return fig
 
 
 # --- Carte du circuit avec numérotation des virages ---
-
 @_safe_figure
-def figure_carte_virages(sess,
-                          pilote: str | int | None = None,
-                          lap_number: int | None = None,
+def figure_carte_virages(tel: pd.DataFrame,
+                          sess=None,
                           figsize=(12, 6.75),
                           dpi=100,
                           track_color='#e6edf3',
@@ -905,152 +785,72 @@ def figure_carte_virages(sess,
                           bubble_color='#c1322d',
                           bubble_size: float = 160.0,
                           link_color='#484f58',
-                          offset_length: float = 500.0,
-                          show_title: bool = True):
-    """
-    Trace la carte du circuit à partir des données de position d'un tour et
-    annote la carte avec les numéros de virage.
+                          offset_length: float = 500.0):
+    """Trace le tracé du circuit depuis les données de position pré-extraites
+    et annote les numéros de virage.
 
     Paramètres
     ----------
-    sess : fastf1.core.Session
-        Session FastF1 déjà chargée.
-    pilote : str | int | None
-        Pilote ciblé (abréviation / numéro / BroadcastName). Si None, on utilise
-        simplement le tour le plus rapide de la session (tous pilotes).
-    lap_number : int | None
-        Numéro de tour à tracer. Si None, utilise le tour le plus rapide pour
-        le pilote choisi (ou celui de la session si `pilote` est None).
-    figsize, dpi :
-        Taille et résolution de la figure.
-    track_color, track_linewidth :
-        Couleur/épaisseur de la ligne du tracé (piste).
-    bubble_color, bubble_size :
-        Couleur/taille des bulles contenant les numéros de virage.
-    link_color :
-        Couleur du trait joignant la piste à la bulle.
-    offset_length :
-        Longueur du vecteur de décalage latéral des étiquettes.
-    show_title : bool
-        Afficher le titre (localisation de l'événement).
-
-    Retour
-    ------
-    matplotlib.figure.Figure
+    tel : pd.DataFrame
+        Télémétrie pré-extraite (colonnes X, Y).
+    sess : Session FastF1 optionnelle — uniquement pour get_circuit_info().
+        Si absente ou si get_circuit_info échoue, le tracé s'affiche sans
+        numéros de virage.
     """
-    _ensure_session_loaded(sess)
+    if tel is None or len(tel) == 0:
+        return _err_figure("Données de position vides", figsize=figsize, dpi=dpi)
+    if not all(c in tel.columns for c in ("X", "Y")):
+        return _err_figure("Colonnes X/Y manquantes", figsize=figsize, dpi=dpi)
 
-    import numpy as _np
+    track = tel[['X', 'Y']].to_numpy(dtype=float)
 
-    def _rotate(xy, *, angle):
-        rot_mat = _np.array([[ _np.cos(angle),  _np.sin(angle)],
-                             [-_np.sin(angle),  _np.cos(angle)]])
-        return _np.matmul(xy, rot_mat)
-
-    # Sélection du tour
-    laps = sess.laps
-    if pilote is not None:
-        # Tenter de résoudre l'identifiant abrégé comme dans les autres helpers
-        drv_identifier = pilote
+    # Infos circuit (virages) — optionnel, via Session
+    circuit_info = None
+    if sess is not None:
         try:
-            res = getattr(sess, "results", None)
-            if res is not None and not res.empty:
-                if isinstance(pilote, str) and 'BroadcastName' in res.columns and 'Abbreviation' in res.columns:
-                    m = dict(zip(res['BroadcastName'], res['Abbreviation']))
-                    drv_identifier = m.get(pilote, pilote)
-                if 'DriverNumber' in res.columns and 'Abbreviation' in res.columns:
-                    mnum = dict(zip(res['DriverNumber'].astype(str), res['Abbreviation']))
-                    drv_identifier = mnum.get(str(drv_identifier), drv_identifier)
+            circuit_info = sess.get_circuit_info()
+        except Exception as exc:
+            logger.debug("get_circuit_info a échoué: %s", exc)
+
+    # Rotation du tracé
+    track_angle = 0.0
+    if circuit_info is not None and hasattr(circuit_info, 'rotation'):
+        try:
+            track_angle = float(circuit_info.rotation) / 180.0 * np.pi
         except Exception:
             pass
-        laps = laps.pick_drivers(drv_identifier)
 
-    if laps is None or len(laps) == 0:
-        return _err_figure("Aucun tour disponible pour cette session", figsize=figsize, dpi=dpi)
+    def _rotate(xy, *, angle):
+        rot = np.array([[np.cos(angle), np.sin(angle)],
+                        [-np.sin(angle), np.cos(angle)]])
+        return np.matmul(xy, rot)
 
-    lap = _select_lap(laps, lap_number)
-    if lap is None:
-        return _err_figure("Tour indisponible (aucun tour valide trouvé)", figsize=figsize, dpi=dpi)
+    rotated = _rotate(track, angle=track_angle)
 
-    # Position et infos circuit
-    try:
-        pos = lap.get_pos_data()
-    except Exception as exc:
-        logger.exception("get_pos_data a échoué")
-        return _err_figure(f"Données de position indisponibles : {type(exc).__name__}: {exc}", figsize=figsize, dpi=dpi)
-
-    try:
-        circuit_info = sess.get_circuit_info()
-    except Exception as exc:
-        logger.warning("get_circuit_info a échoué: %s", exc)
-        circuit_info = None
-
-    if pos is None or len(pos) == 0:
-        return _err_figure("Données de position vides", figsize=figsize, dpi=dpi)
-
-    if not all(c in pos.columns for c in ("X", "Y")):
-        return _err_figure("Colonnes X/Y manquantes dans les données de position", figsize=figsize, dpi=dpi)
-
-    # Créer la figure (thème sombre)
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
     fig.patch.set_facecolor('#0d1117')
     ax.set_facecolor('#0d1117')
 
-    track = pos.loc[:, ('X', 'Y')].to_numpy()
+    ax.plot(rotated[:, 0], rotated[:, 1], color=track_color, linewidth=track_linewidth)
 
-    # Angle global de rotation de la carte
-    track_angle = 0.0
-    if circuit_info is not None and hasattr(circuit_info, 'rotation'):
-        try:
-            track_angle = float(circuit_info.rotation) / 180.0 * _np.pi
-        except Exception:
-            track_angle = 0.0
-
-    rotated_track = _rotate(track, angle=track_angle)
-
-    # Tracé piste
-    ax.plot(rotated_track[:, 0], rotated_track[:, 1], color=track_color, linewidth=track_linewidth)
-
-    # Annoter les virages
     if circuit_info is not None and getattr(circuit_info, 'corners', None) is not None and not circuit_info.corners.empty:
-        offset_vec = _np.array([offset_length, 0])
+        offset_vec = np.array([offset_length, 0])
         for _, corner in circuit_info.corners.iterrows():
             try:
                 txt = f"{corner['Number']}{corner['Letter']}"
-
-                # Angle local de la pancarte
-                offset_angle = float(corner['Angle']) / 180.0 * _np.pi
-                offset_x, offset_y = _rotate(offset_vec, angle=offset_angle)
-
-                # Position texte
-                text_x = float(corner['X']) + offset_x
-                text_y = float(corner['Y']) + offset_y
-
-                # Rotation globale pour rester cohérent avec la piste
-                text_x, text_y = _rotate([text_x, text_y], angle=track_angle)
-                track_x, track_y = _rotate([float(corner['X']), float(corner['Y'])], angle=track_angle)
-
-                # Bulle + lien
-                ax.scatter(text_x, text_y, color=bubble_color, s=bubble_size, zorder=3)
-                ax.plot([track_x, text_x], [track_y, text_y], color=link_color, linewidth=1, zorder=2)
-                ax.text(text_x, text_y, txt, va='center_baseline', ha='center',
+                offset_angle = float(corner['Angle']) / 180.0 * np.pi
+                off = _rotate(offset_vec, angle=offset_angle)
+                tx, ty = _rotate([float(corner['X']) + off[0], float(corner['Y']) + off[1]], angle=track_angle)
+                px, py = _rotate([float(corner['X']), float(corner['Y'])], angle=track_angle)
+                ax.scatter(tx, ty, color=bubble_color, s=bubble_size, zorder=3)
+                ax.plot([px, tx], [py, ty], color=link_color, linewidth=1, zorder=2)
+                ax.text(tx, ty, txt, va='center_baseline', ha='center',
                         size='small', color='#ffffff', fontweight='bold', zorder=4)
             except Exception:
                 continue
 
-    # Finition
-    if show_title:
-        try:
-            title_txt = sess.event['Location'] if isinstance(sess.event, dict) else getattr(sess.event, 'Location', None)
-            if not title_txt:
-                title_txt = getattr(sess.event, 'name', '')
-            plt.title(title_txt, color="#e6edf3", fontsize=16, fontweight=500, pad=12)
-        except Exception:
-            pass
-
-    # Limites avant axis('off')
-    ax.set_xlim(rotated_track[:, 0].min(), rotated_track[:, 0].max())
-    ax.set_ylim(rotated_track[:, 1].min(), rotated_track[:, 1].max())
+    ax.set_xlim(rotated[:, 0].min(), rotated[:, 0].max())
+    ax.set_ylim(rotated[:, 1].min(), rotated[:, 1].max())
     ax.set_aspect('equal')
     ax.axis('off')
     return fig

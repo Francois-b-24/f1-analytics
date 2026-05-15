@@ -61,7 +61,7 @@ def _get_best_lap_no(d):
 
 colored_header("Télémétries sur le tour le plus rapide", description=None, color_name="blue-70")
 try:
-    d1_fast, tel_1 = tour_rapide_tel(sess, pilote_1)
+    d1_fast, tel_1 = tour_rapide_tel(data, pilote_1)
     fig = px.line(
         tel_1, x='Distance', y='Speed',
         title=f"Tour le plus rapide – {pilote_1}",
@@ -70,7 +70,7 @@ try:
     d2_fast = None
     tel_2 = None
     if pilote_2:
-        d2_fast, tel_2 = tour_rapide_tel(sess, pilote_2)
+        d2_fast, tel_2 = tour_rapide_tel(data, pilote_2)
         fig.add_scatter(x=tel_2['Distance'], y=tel_2['Speed'], mode='lines', name=pilote_2)
     st.plotly_chart(fig, use_container_width=True)
 
