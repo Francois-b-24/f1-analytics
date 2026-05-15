@@ -232,11 +232,12 @@ def _extract_best_lap_tel(sess, driver_codes: list[str]) -> dict[str, pd.DataFra
 
 
 @st.cache_data(show_spinner="Chargement de la session F1…", max_entries=4, ttl=3600)
-def _chargement_dataframes(annee: int, course: str, sess_type: str):
+def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 3):
     """Charge tous les DataFrames sérialisables.
 
     _build_session extrait la télémétrie AVANT que cache_data ne touche
     à quoi que ce soit (le pickle de cache_data vide _car_data/_pos_data).
+    _v : version interne pour invalider le cache en cas de changement de structure.
     """
     sess, tel_par_pilote, best_laps = _build_session(annee, course, sess_type)
 
