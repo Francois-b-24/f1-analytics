@@ -132,11 +132,40 @@ def _ensure_session_loaded(sess) -> None:
 
 
 def _build_session(annee: int, course: str, sess_type: str):
-    """Crée et charge une session FastF1 fraîche (non cachée)."""
+    """Crée, charge et retourne une session FastF1 fraîche + la télémétrie
+    extraite IMMÉDIATEMENT, avant tout passage par le cache Streamlit.
+
+    Retourne (sess, tel_par_pilote, best_laps).
+    L'extraction a lieu ici car @st.cache_data pickle l'objet Session
+    dès qu'il entre dans la fonction décorée — _car_data/_pos_data sont
+    perdus à ce moment. Il faut donc extraire avant que cache_data touche
+    quoi que ce soit.
+    """
     logger.info("Chargement session %s / %s / %s", annee, course, sess_type)
     sess = fastf1.get_session(annee, course, sess_type)
-    sess.load()  # laps + telemetry + weather + messages (par défaut)
-    return sess
+    sess.load()
+
+    # Extraction immédiate pendant que _car_data/_pos_data sont en mémoire
+    driver_codes = sorted(sess.laps['Driver'].dropna().unique().tolist())
+    tel_par_pilote = _extract_best_lap_tel(sess, driver_codes)
+    logger.info("Télémétrie extraite pour %d/%d pilotes", len(tel_par_pilote), len(driver_codes))
+
+    best_laps: dict[str, dict] = {}
+    for drv in driver_codes:
+        try:
+            laps_drv = sess.laps[sess.laps['Driver'] == drv].dropna(subset=['LapTime'])
+            if laps_drv.empty:
+                continue
+            idx = laps_drv['LapTime'].idxmin()
+            row = laps_drv.loc[idx]
+            best_laps[drv] = {
+                'LapTime': row['LapTime'],
+                'LapNumber': int(row['LapNumber']) if pd.notna(row.get('LapNumber')) else None,
+            }
+        except Exception:
+            pass
+
+    return sess, tel_par_pilote, best_laps
 
 
 def _get_or_reload_session(annee: int, course: str, sess_type: str):
@@ -150,15 +179,14 @@ def _get_or_reload_session(annee: int, course: str, sess_type: str):
     key = f"_f1_sess_{annee}_{course}_{sess_type}"
     sess = st.session_state.get(key)
     if sess is None:
-        sess = _build_session(annee, course, sess_type)
+        sess, _, _ = _build_session(annee, course, sess_type)
         st.session_state[key] = sess
         return sess
-    # Session présente : s'assurer que la télémétrie est en mémoire
     try:
         _ensure_session_loaded(sess)
     except Exception as exc:
         logger.warning("Reload en place a échoué (%s), rebuild complet", exc)
-        sess = _build_session(annee, course, sess_type)
+        sess, _, _ = _build_session(annee, course, sess_type)
         st.session_state[key] = sess
     return sess
 
@@ -198,20 +226,19 @@ def _extract_best_lap_tel(sess, driver_codes: list[str]) -> dict[str, pd.DataFra
                 merged[c] = pos[c].iloc[:n].values
             result[drv] = merged.reset_index(drop=True)
         except Exception as exc:
-            logger.debug("Télémétrie indisponible pour %s: %s", drv, exc)
+            logger.warning("Extraction télémétrie échouée pour %s: %s: %s",
+                           drv, type(exc).__name__, exc)
     return result
 
 
 @st.cache_data(show_spinner="Chargement de la session F1…", max_entries=4, ttl=3600)
 def _chargement_dataframes(annee: int, course: str, sess_type: str):
-    """Charge tous les DataFrames sérialisables en une passe pendant que la
-    session est fraîche en mémoire : tours, météo, résultats, et télémétrie
-    du meilleur tour par pilote.
+    """Charge tous les DataFrames sérialisables.
 
-    Tout est extrait ici pour ne plus jamais avoir besoin de rouvrir
-    lap.session (qui peut être dégradé par le cache Streamlit).
+    _build_session extrait la télémétrie AVANT que cache_data ne touche
+    à quoi que ce soit (le pickle de cache_data vide _car_data/_pos_data).
     """
-    sess = _build_session(annee, course, sess_type)
+    sess, tel_par_pilote, best_laps = _build_session(annee, course, sess_type)
 
     tours = sess.laps.copy().reset_index(drop=True)
     if 'LapTime' in tours:
@@ -236,31 +263,11 @@ def _chargement_dataframes(annee: int, course: str, sess_type: str):
         logger.info("Résultats officiels indisponibles: %s", exc)
         results = pd.DataFrame()
 
-    # Extraction télémétrie pendant que la session est fraîche
-    tel_par_pilote = _extract_best_lap_tel(sess, driver_codes)
-    logger.info("Télémétrie extraite pour %d/%d pilotes", len(tel_par_pilote), len(driver_codes))
-
-    # Meilleur tour par pilote (LapTime + LapNumber) — stocké pour l'UI
-    best_laps: dict[str, dict] = {}
-    for drv in driver_codes:
-        try:
-            laps_drv = tours[tours['Driver'] == drv].dropna(subset=['LapTime'])
-            if laps_drv.empty:
-                continue
-            idx = laps_drv['LapTime'].idxmin()
-            row = laps_drv.loc[idx]
-            best_laps[drv] = {
-                'LapTime': row['LapTime'],
-                'LapNumber': int(row['LapNumber']) if pd.notna(row.get('LapNumber')) else None,
-            }
-        except Exception:
-            pass
-
-    # On garde la session en session_state pour les viz matplotlib
     key = f"_f1_sess_{annee}_{course}_{sess_type}"
     st.session_state[key] = sess
 
-    logger.info("Session chargée: %d tours, %d pilotes", len(tours), len(driver_codes))
+    logger.info("Session chargée: %d tours, %d pilotes, %d avec télémétrie",
+                len(tours), len(driver_codes), len(tel_par_pilote))
     return dict(
         nom=sess.name,
         tours=tours,
