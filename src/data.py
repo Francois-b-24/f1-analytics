@@ -105,24 +105,29 @@ def _safe_figure(fn):
 
     return wrapper
 
-def _session_has_pos_data(sess) -> bool:
-    """Vérifie qu'une session FastF1 a bien ses pos_data/car_data chargés.
+def _session_telemetry_ready(sess) -> bool:
+    """Vérifie qu'une session FastF1 a bien ses données télémétrie chargées.
 
-    `st.cache_resource` peut renvoyer une session dont les attributs internes
-    (_pos_data, _car_data) ne sont plus initialisés après une éviction
-    partielle ou un cycle GC. Dans ce cas, get_pos_data/get_telemetry lèvent
-    DataNotLoadedError. On vérifie via les flags internes de FastF1.
+    FastF1 utilise `hasattr(sess, '_car_data')` / `'_pos_data'` comme garde
+    interne pour `Session.car_data` / `Session.pos_data`. Si l'un manque,
+    `lap.get_car_data()` ou `lap.get_pos_data()` lèvent DataNotLoadedError.
+
+    On vérifie les DEUX attributs car ils sont chargés ensemble par
+    `_load_telemetry`.
     """
-    try:
-        # Accès non-throwing aux flags de chargement internes
-        loaded = getattr(sess, "_loaded", None) or {}
-        if isinstance(loaded, dict):
-            # FastF1 3.x : dict avec clés "laps", "telemetry", "weather", "messages"
-            return bool(loaded.get("telemetry", False))
-        # Fallback : tenter d'accéder à pos_data via la propriété privée
-        return getattr(sess, "_pos_data", None) is not None
-    except Exception:
-        return False
+    return hasattr(sess, "_car_data") and hasattr(sess, "_pos_data")
+
+
+def _ensure_session_loaded(sess) -> None:
+    """Si la session a perdu ses attributs télémétrie, recharge en place.
+
+    `sess.load()` est idempotente et utilise le cache disque FastF1, donc
+    rapide (lecture des .ff1pkl locaux).
+    """
+    if _session_telemetry_ready(sess):
+        return
+    logger.info("Session sans télémétrie en mémoire — rechargement en place")
+    sess.load()
 
 
 def _build_session(annee: int, course: str, sess_type: str):
@@ -134,20 +139,26 @@ def _build_session(annee: int, course: str, sess_type: str):
 
 
 def _get_or_reload_session(annee: int, course: str, sess_type: str):
-    """Renvoie un objet Session live. Utilise un cache `st.session_state`
-    par utilisateur — pas `cache_resource` qui peut perdre les attributs
-    internes (_pos_data, _car_data) entre runs et casser get_pos_data().
+    """Renvoie un objet Session live avec télémétrie garantie chargée.
 
-    Si une session existe en session_state mais a perdu ses données, on
-    recharge depuis le cache disque FastF1 (rapide).
+    Stockage par utilisateur dans `st.session_state` (pas inter-utilisateurs
+    comme cache_resource). Si la session existe mais a perdu ses attributs
+    `_car_data` / `_pos_data` (Streamlit peut wrapper l'objet entre runs),
+    on rappelle `sess.load()` qui repeuple en mémoire depuis le cache disque.
     """
     key = f"_f1_sess_{annee}_{course}_{sess_type}"
     sess = st.session_state.get(key)
-    if sess is not None and _session_has_pos_data(sess):
+    if sess is None:
+        sess = _build_session(annee, course, sess_type)
+        st.session_state[key] = sess
         return sess
-    # (Re)charge
-    sess = _build_session(annee, course, sess_type)
-    st.session_state[key] = sess
+    # Session présente : s'assurer que la télémétrie est en mémoire
+    try:
+        _ensure_session_loaded(sess)
+    except Exception as exc:
+        logger.warning("Reload en place a échoué (%s), rebuild complet", exc)
+        sess = _build_session(annee, course, sess_type)
+        st.session_state[key] = sess
     return sess
 
 
@@ -262,6 +273,9 @@ def tour_rapide_tel(_sess, code_pilote: str):
     ValueError
         Si aucun tour valide n'est trouvé pour le pilote.
     """
+    # Garantit que _car_data est en mémoire (sinon get_car_data crash)
+    _ensure_session_loaded(_sess)
+
     laps = _sess.laps.pick_drivers(code_pilote)
     if laps is None or len(laps) == 0:
         raise ValueError(f"Aucun tour pour le pilote {code_pilote}")
@@ -616,6 +630,8 @@ def figure_carte_vitesse(sess,
     ------
     matplotlib.figure.Figure
     """
+    _ensure_session_loaded(sess)
+
     # Résoudre l'abréviation depuis BroadcastName/numéro si nécessaire
     drv_identifier = pilote
     try:
@@ -756,6 +772,8 @@ def figure_carte_rapports(sess,
     ------
     matplotlib.figure.Figure
     """
+    _ensure_session_loaded(sess)
+
     # Choix de la colormap
     if cmap is None:
         cmap = mpl.colormaps['Paired']
@@ -904,6 +922,8 @@ def figure_carte_virages(sess,
     ------
     matplotlib.figure.Figure
     """
+    _ensure_session_loaded(sess)
+
     import numpy as _np
 
     def _rotate(xy, *, angle):
