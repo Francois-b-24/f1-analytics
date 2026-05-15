@@ -12,3 +12,9 @@ dependencies = [
     "streamlit-extras",
     "numpy>=2.0.2",
 ]
+
+[tool.pytest.ini_options]
+# Ajoute la racine du repo au sys.path pour que `from src...` fonctionne
+# depuis tests/ sans dépendre du cwd.
+pythonpath = ["."]
+testpaths = ["tests"]
