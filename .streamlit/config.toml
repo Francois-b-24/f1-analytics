@@ -12,9 +12,11 @@ gatherUsageStats = false
 level = "info"
 messageFormat = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
+# Theme cohérent avec f1_theme.css — palette sombre sophistiquée
 [theme]
 base = "dark"
-primaryColor = "#E10600"
-backgroundColor = "#0E1117"
-secondaryBackgroundColor = "#1A1F2C"
-textColor = "#FAFAFA"
+primaryColor = "#c1322d"                 # rouge Ferrari désaturé
+backgroundColor = "#0d1117"              # anthracite profond
+secondaryBackgroundColor = "#161b22"     # surface (cartes, sidebar)
+textColor = "#e6edf3"                    # blanc cassé doux
+font = "sans serif"

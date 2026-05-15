@@ -1,202 +1,405 @@
-/* === Thème F1 Lumineux et Élégant (Mode Nuit/Jour) === */
+/* === F1 Analytics — Thème sombre sophistiqué ===
+ *
+ * Palette inspirée de la Formule 1 : asphalte, carbone, accent rouge
+ * désaturé (terre cuite), accent doré champagne pour les highlights.
+ * Mode unique sombre pour cohérence — pas de prefers-color-scheme
+ * (évite les conflits avec le theme Streamlit).
+ */
 
-/* --- Variables CSS pour adaptation automatique --- */
 :root {
-    /* Mode clair - couleurs lumineuses et aérées */
-    --couleur-fond: #f5f7fa;
-    --couleur-texte: #1e293b;
-    --couleur-texte-secondaire: #64748b;
-    --couleur-bordure: #cbd5e1;
-    --couleur-accent: #3b82f6;
-    --couleur-accent-clair: #60a5fa;
-    --couleur-accent-vif: #2563eb;
-    --couleur-sidebar: #ffffff;
-    --couleur-metric-bg: #ffffff;
-    --couleur-metric-border: #e2e8f0;
-    --couleur-metric-accent: #3b82f6;
-    --couleur-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --couleur-rouge-voiture: #dc2626;
+    /* --- Fonds --- */
+    --bg-base: #0d1117;          /* fond principal — anthracite profond */
+    --bg-surface: #161b22;       /* cartes, sidebar */
+    --bg-elevated: #1c232c;      /* surface au-dessus */
+    --bg-overlay: rgba(22, 27, 34, 0.85);
+
+    /* --- Texte --- */
+    --text-primary: #e6edf3;     /* texte principal — blanc cassé doux */
+    --text-secondary: #9ba3af;   /* texte secondaire — gris perle */
+    --text-muted: #6b7280;
+
+    /* --- Bordures --- */
+    --border-subtle: #21262d;
+    --border-default: #30363d;
+    --border-emphasis: #484f58;
+
+    /* --- Accents F1 --- */
+    --accent-red: #c1322d;       /* rouge Ferrari désaturé, sophistiqué */
+    --accent-red-soft: rgba(193, 50, 45, 0.15);
+    --accent-gold: #c9a961;      /* champagne podium */
+    --accent-gold-soft: rgba(201, 169, 97, 0.12);
+    --accent-blue: #58a6ff;      /* bleu froid pour data viz */
+
+    /* --- États --- */
+    --success: #56d364;
+    --warning: #d29922;
+    --danger: #f85149;
 }
 
-/* Mode sombre - couleurs lumineuses mais douces */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --couleur-fond: #0f172a;
-        --couleur-texte: #f1f5f9;
-        --couleur-texte-secondaire: #cbd5e1;
-        --couleur-bordure: #475569;
-        --couleur-accent: #60a5fa;
-        --couleur-accent-clair: #93c5fd;
-        --couleur-accent-vif: #3b82f6;
-        --couleur-sidebar: #1e293b;
-        --couleur-metric-bg: #1e293b;
-        --couleur-metric-border: #334155;
-        --couleur-metric-accent: #60a5fa;
-        --couleur-gradient: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-        --couleur-rouge-voiture: #ef4444;
-    }
+/* === Reset & globals === */
+html, body, .stApp, [data-testid="stAppViewContainer"] {
+    background-color: var(--bg-base) !important;
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
 }
 
-/* --- Fond général lumineux --- */
-body {
-    background: var(--couleur-fond);
-    color: var(--couleur-texte);
+/* === Header (bandeau du haut) — corrige texte blanc sur fond blanc === */
+header[data-testid="stHeader"] {
+    background-color: var(--bg-base) !important;
+    border-bottom: 1px solid var(--border-subtle);
+    backdrop-filter: blur(8px);
 }
 
-header[data-testid="stHeader"],
-section.main > div:first-child {
-    background: transparent;
+header[data-testid="stHeader"] * {
+    color: var(--text-primary) !important;
 }
 
-/* --- Titre lumineux et élégant avec effet sobre --- */
+/* Bouton burger / icônes du header */
+header[data-testid="stHeader"] button {
+    color: var(--text-secondary) !important;
+}
+header[data-testid="stHeader"] button:hover {
+    background-color: var(--bg-elevated) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Toolbar Streamlit (Deploy/menu/etc.) */
+[data-testid="stToolbar"], [data-testid="stDecoration"] {
+    background-color: var(--bg-base) !important;
+}
+[data-testid="stToolbar"] * {
+    color: var(--text-secondary) !important;
+}
+
+/* === Titre principal === */
 .f1-glow {
-    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
-    font-size: 2.2em;
-    font-weight: 600;
-    background: linear-gradient(135deg, var(--couleur-accent-vif) 0%, var(--couleur-accent-clair) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    letter-spacing: 0.8px;
-    margin-bottom: 0.2em;
-    text-shadow: 0 2px 20px rgba(59, 130, 246, 0.15);
+    font-size: 2.4em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text-primary);
     position: relative;
     display: inline-block;
-    transition: all 0.3s ease;
+    padding: 0.2em 0;
 }
 
 .f1-glow::after {
     content: '';
     position: absolute;
-    bottom: -4px;
-    left: 0;
-    width: 100%;
+    bottom: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
     height: 2px;
-    background: linear-gradient(90deg, transparent, var(--couleur-accent-vif), transparent);
-    opacity: 0.6;
-    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent-red) 30%, var(--accent-gold) 70%, transparent);
+    opacity: 0.7;
 }
 
-/* --- Emoji voiture en rouge --- */
 .f1-car-emoji {
-    color: var(--couleur-rouge-voiture) !important;
-    display: inline-block;
-    margin-right: 8px;
-    font-size: 1em;
-    filter: none !important;
-    -webkit-text-fill-color: var(--couleur-rouge-voiture) !important;
-    text-shadow: 0 1px 3px rgba(220, 38, 38, 0.3);
+    margin-right: 10px;
+    filter: drop-shadow(0 0 6px rgba(193, 50, 45, 0.4));
 }
 
-.f1-flag {
-    vertical-align: middle;
-    margin-left: 8px;
+/* === Citation === */
+.citation {
+    color: var(--accent-gold);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: 0.3px;
+    opacity: 0.9;
 }
 
-/* --- Sidebar lumineuse avec léger dégradé --- */
+/* === Sidebar === */
+section[data-testid="stSidebar"] {
+    background-color: var(--bg-surface) !important;
+    border-right: 1px solid var(--border-subtle);
+}
+
 section[data-testid="stSidebar"] > div {
-    background: var(--couleur-sidebar);
-    border-right: 1px solid var(--couleur-bordure);
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+    background-color: var(--bg-surface) !important;
 }
 
-/* --- Cartes métriques lumineuses et élégantes --- */
+section[data-testid="stSidebar"] * {
+    color: var(--text-primary);
+}
+
+section[data-testid="stSidebar"] .stCaption,
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+    color: var(--text-secondary) !important;
+}
+
+/* === Headings === */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-primary) !important;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+}
+
+/* Colored header de streamlit-extras */
+[data-testid="stMarkdownContainer"] h2,
+[data-testid="stMarkdownContainer"] h3 {
+    color: var(--text-primary) !important;
+}
+
+/* === Texte général markdown === */
+[data-testid="stMarkdownContainer"] {
+    color: var(--text-primary);
+}
+
+[data-testid="stMarkdownContainer"] p {
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+
+/* === Métriques (KPI cards) === */
 div[data-testid="stMetric"] {
-    background: var(--couleur-metric-bg) !important;
-    border: 1px solid var(--couleur-metric-border) !important;
-    border-left: 0.4rem solid var(--couleur-metric-accent) !important;
-    border-radius: 10px !important;
-    padding: 18px !important;
-    margin-bottom: 10px !important;
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
-    transition: all 0.3s ease;
+    background-color: var(--bg-surface) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-left: 3px solid var(--accent-red) !important;
+    border-radius: 8px !important;
+    padding: 1rem 1.25rem !important;
+    transition: border-color 0.25s ease, transform 0.25s ease;
 }
 
 div[data-testid="stMetric"]:hover {
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
-    transform: translateY(-2px);
-    border-left-color: var(--couleur-accent-vif) !important;
+    border-left-color: var(--accent-gold) !important;
+    transform: translateY(-1px);
 }
 
-div[data-testid="stMetric"] * {
-    color: var(--couleur-texte) !important;
+div[data-testid="stMetric"] [data-testid="stMetricLabel"] {
+    color: var(--text-secondary) !important;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
 }
 
-/* --- Plotly fond lumineux --- */
-[data-testid="stPlotlyChart"] .js-plotly-plot .plotly {
-    background: var(--couleur-fond) !important;
+div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+    color: var(--text-primary) !important;
+    font-weight: 600;
+    font-size: 1.6em;
 }
 
-/* --- Masquer logo Streamlit par défaut --- */
-#MainMenu, footer {
-    visibility: hidden;
+div[data-testid="stMetric"] [data-testid="stMetricDelta"] {
+    color: var(--text-secondary) !important;
 }
 
-/* --- Onglets lumineux --- */
+/* === Boutons === */
+.stButton > button {
+    background-color: var(--bg-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    padding: 0.45rem 1.2rem;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    transition: all 0.2s ease;
+}
+
+.stButton > button:hover {
+    background-color: var(--accent-red);
+    border-color: var(--accent-red);
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(193, 50, 45, 0.25);
+}
+
+.stButton > button:active {
+    transform: translateY(0);
+}
+
+/* Bouton primary (Streamlit type=primary) */
+.stButton > button[kind="primary"] {
+    background-color: var(--accent-red);
+    border-color: var(--accent-red);
+    color: #fff;
+}
+
+/* === Selectbox / inputs === */
+.stSelectbox > div > div,
+.stTextInput > div > div,
+.stNumberInput > div > div,
+.stDateInput > div > div {
+    background-color: var(--bg-surface) !important;
+    border: 1px solid var(--border-default) !important;
+    border-radius: 6px !important;
+    color: var(--text-primary) !important;
+}
+
+.stSelectbox > div > div:hover,
+.stTextInput > div > div:hover {
+    border-color: var(--border-emphasis) !important;
+}
+
+.stSelectbox > div > div:focus-within,
+.stTextInput > div > div:focus-within {
+    border-color: var(--accent-gold) !important;
+    box-shadow: 0 0 0 2px var(--accent-gold-soft) !important;
+}
+
+/* Label des inputs */
+.stSelectbox label,
+.stTextInput label,
+.stNumberInput label,
+.stDateInput label,
+.stSlider label,
+.stCheckbox label,
+.stRadio label {
+    color: var(--text-secondary) !important;
+    font-weight: 500;
+    font-size: 0.9em;
+}
+
+/* Dropdown menu (BaseWeb popover) */
+[data-baseweb="popover"] [role="listbox"],
+[data-baseweb="menu"] {
+    background-color: var(--bg-elevated) !important;
+    border: 1px solid var(--border-default) !important;
+}
+
+[data-baseweb="menu"] li {
+    color: var(--text-primary) !important;
+}
+
+[data-baseweb="menu"] li:hover {
+    background-color: var(--accent-red-soft) !important;
+}
+
+/* === Onglets === */
+.stTabs [data-baseweb="tab-list"] {
+    border-bottom: 1px solid var(--border-subtle);
+    gap: 0;
+}
+
 .stTabs [data-baseweb="tab"] {
-    color: var(--couleur-texte-secondaire);
+    color: var(--text-secondary);
+    background: transparent;
+    padding: 0.6rem 1.2rem;
+    font-weight: 500;
     transition: color 0.2s ease;
 }
 
 .stTabs [data-baseweb="tab"]:hover {
-    color: var(--couleur-accent);
+    color: var(--text-primary);
 }
 
 .stTabs [aria-selected="true"] {
-    background: transparent;
-    color: var(--couleur-accent-vif);
-    border-bottom: 3px solid var(--couleur-metric-accent);
-    font-weight: 600;
+    color: var(--accent-gold) !important;
+    border-bottom: 2px solid var(--accent-gold) !important;
 }
 
-/* --- Dataframes hover lumineux --- */
-.stDataFrame tbody tr:hover {
-    background-color: rgba(59, 130, 246, 0.08) !important;
-    transition: background-color 0.2s ease;
-}
-
-/* --- Citations lumineuses --- */
-.citation {
-    color: var(--couleur-accent);
-    font-style: italic;
-    font-weight: 500;
-}
-
-/* --- Boutons lumineux et élégants --- */
-.stButton > button {
-    background: var(--couleur-gradient);
-    color: #ffffff;
-    border: none;
+/* === Dataframes / tables === */
+.stDataFrame {
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
-    padding: 0.5rem 1.5rem;
-    font-weight: 500;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+    overflow: hidden;
 }
 
-.stButton > button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+.stDataFrame [data-testid="stTable"],
+.stDataFrame table {
+    background-color: var(--bg-surface) !important;
+    color: var(--text-primary) !important;
 }
 
-/* --- Headers colorés --- */
-h1, h2, h3 {
-    color: var(--couleur-accent-vif);
+.stDataFrame thead tr {
+    background-color: var(--bg-elevated) !important;
+    color: var(--text-secondary) !important;
+    text-transform: uppercase;
+    font-size: 0.8em;
+    letter-spacing: 0.5px;
 }
 
-/* --- Inputs et selectbox lumineux --- */
-.stSelectbox > div > div {
-    border-color: var(--couleur-bordure);
-    transition: border-color 0.2s ease;
+.stDataFrame tbody tr:hover {
+    background-color: var(--accent-red-soft) !important;
 }
 
-.stSelectbox > div > div:hover {
-    border-color: var(--couleur-accent);
+/* === Alertes === */
+[data-testid="stAlert"] {
+    border-radius: 6px;
+    border-left-width: 3px;
 }
 
-/* --- Effet de brillance subtil sur les éléments interactifs --- */
-.stSelectbox > div > div:focus-within,
-.stTextInput > div > div > input:focus {
-    border-color: var(--couleur-accent-vif) !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+[data-testid="stAlert"][kind="info"],
+.stAlert.st-info {
+    background-color: rgba(88, 166, 255, 0.08);
+    border-left-color: var(--accent-blue);
+    color: var(--text-primary);
+}
+
+[data-testid="stAlert"][kind="warning"] {
+    background-color: rgba(210, 153, 34, 0.08);
+    border-left-color: var(--warning);
+}
+
+[data-testid="stAlert"][kind="error"] {
+    background-color: rgba(248, 81, 73, 0.08);
+    border-left-color: var(--danger);
+}
+
+[data-testid="stAlert"][kind="success"] {
+    background-color: rgba(86, 211, 100, 0.08);
+    border-left-color: var(--success);
+}
+
+/* === Expander === */
+.streamlit-expanderHeader,
+[data-testid="stExpander"] summary {
+    background-color: var(--bg-surface) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: 6px !important;
+}
+
+[data-testid="stExpander"] summary:hover {
+    border-color: var(--border-emphasis) !important;
+}
+
+/* === Plotly charts === */
+[data-testid="stPlotlyChart"] {
+    background-color: transparent !important;
+    border-radius: 8px;
+}
+
+/* === Code blocks === */
+[data-testid="stCodeBlock"], pre, code {
+    background-color: var(--bg-elevated) !important;
+    color: var(--text-primary) !important;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+}
+
+/* === Sliders === */
+.stSlider [role="slider"] {
+    background-color: var(--accent-red) !important;
+    border-color: var(--accent-red) !important;
+}
+
+/* === Scrollbar custom === */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+::-webkit-scrollbar-track {
+    background: var(--bg-base);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--border-default);
+    border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--border-emphasis);
+}
+
+/* === Hide Streamlit default chrome === */
+#MainMenu, footer { visibility: hidden; }
+
+/* === Colored header (streamlit-extras) — override bandeau coloré === */
+[data-testid="stMarkdownContainer"] hr {
+    border-color: var(--border-subtle);
+}
+
+/* === Caption === */
+[data-testid="stCaptionContainer"], .stCaption {
+    color: var(--text-secondary) !important;
+    font-size: 0.85em;
 }
