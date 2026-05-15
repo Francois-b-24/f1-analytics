@@ -23,19 +23,31 @@ def _last_completed_event(annee: int) -> str | None:
 
     Permet d'éviter de pré-sélectionner une course future qui ferait crasher
     `sess.load()` (résultats inexistants).
+
+    Normalise les datetimes en tz-naive UTC pour éviter le `TypeError: Invalid
+    comparison between dtype=datetime64[ns, UTC+XX:XX] and Timestamp` quand
+    FastF1 retourne des dates tz-aware (cas typique pour Session5Date).
     """
     import fastf1
     try:
         schedule = fastf1.get_event_schedule(annee, include_testing=False)
     except Exception:
         return None
-    if schedule.empty or 'EventName' not in schedule.columns:
+    if schedule is None or schedule.empty or 'EventName' not in schedule.columns:
         return None
-    now = pd.Timestamp.utcnow().tz_localize(None)
+
     date_col = next((c for c in ('Session5Date', 'EventDate') if c in schedule.columns), None)
     if date_col is None:
         return schedule['EventName'].iloc[0]
-    past = schedule[pd.to_datetime(schedule[date_col], errors='coerce') < now]
+
+    try:
+        dates = pd.to_datetime(schedule[date_col], errors='coerce', utc=True)
+        dates = dates.dt.tz_convert(None)  # tz-naive UTC
+        now = pd.Timestamp.utcnow().tz_localize(None)
+        past = schedule[dates < now]
+    except Exception:
+        return None
+
     if past.empty:
         return None
     return past['EventName'].iloc[-1]
