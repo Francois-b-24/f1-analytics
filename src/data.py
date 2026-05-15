@@ -5,6 +5,7 @@ import logging
 import pandas as pd
 import streamlit as st
 import fastf1
+from fastf1.core import DataNotLoadedError
 from .utils import secs, formatage_timedelta
 import matplotlib.pyplot as plt
 import fastf1.plotting
@@ -284,7 +285,22 @@ def tour_rapide_tel(_sess, code_pilote: str):
     if lap is None:
         raise ValueError(f"Aucun tour valide pour {code_pilote} (LapTime tous NaN ?)")
 
-    tel = lap.get_car_data().add_distance()
+    # `lap.session` peut pointer vers une instance dont _car_data n'est pas
+    # chargé (cache Streamlit, GC, héritage _metadata de pandas). Reload
+    # en place si nécessaire.
+    try:
+        _ensure_session_loaded(lap.session)
+    except Exception as exc:
+        logger.warning("Reload via lap.session a échoué: %s", exc)
+
+    try:
+        tel = lap.get_car_data().add_distance()
+    except DataNotLoadedError:
+        # Dernier recours : force un reload complet de la session du lap
+        logger.warning("get_car_data DataNotLoadedError — force reload session")
+        lap.session.load()
+        tel = lap.get_car_data().add_distance()
+
     return lap, tel
 
 def _round_upto(annee: int, upto_event: str) -> int | None:
