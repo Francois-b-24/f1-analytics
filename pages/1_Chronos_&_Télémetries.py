@@ -23,8 +23,9 @@ if not loaded:
     st.page_link("Home.py", label="🏠 Retour à la Home")
     st.stop()
 
-# 2) Charger les données une seule fois (cache côté scr.data)
+# 2) Charger les données une seule fois (cache côté src.data)
 data = chargement_session(annee, grand_prix, session_type)
+sess = data["session"]
 tours = data["tours"]
 pilotes = data["pilotes"]
 
@@ -60,7 +61,7 @@ def _get_best_lap_no(d):
 
 colored_header("Télémétries sur le tour le plus rapide", description=None, color_name="blue-70")
 try:
-    d1_fast, tel_1 = tour_rapide_tel(f"{annee}-{grand_prix}-{session_type}", tours, pilote_1)
+    d1_fast, tel_1 = tour_rapide_tel(sess, pilote_1)
     fig = px.line(
         tel_1, x='Distance', y='Speed',
         title=f"Tour le plus rapide – {pilote_1}",
@@ -69,7 +70,7 @@ try:
     d2_fast = None
     tel_2 = None
     if pilote_2:
-        d2_fast, tel_2 = tour_rapide_tel(f"{annee}-{grand_prix}-{session_type}", tours, pilote_2)
+        d2_fast, tel_2 = tour_rapide_tel(sess, pilote_2)
         fig.add_scatter(x=tel_2['Distance'], y=tel_2['Speed'], mode='lines', name=pilote_2)
     st.plotly_chart(fig, use_container_width=True)
 
@@ -131,9 +132,10 @@ try:
         else:
             st.info("Delta time indisponible (télémétries incompatibles).")
 except Exception as e:
-    st.info("Télémétrie indisponible pour cette session/pilote.")
-    with st.expander("Détails techniques (debug)"):
-        st.write(e)
+    st.warning(f"Télémétrie indisponible : **{type(e).__name__}** — {e}")
+    with st.expander("Détails techniques"):
+        import traceback
+        st.code(traceback.format_exc())
 
 
 colored_header("Informations par tour un pilote", description=None, color_name="blue-70")

@@ -171,29 +171,44 @@ def chargement_session(annee: int, course: str, sess_type: str):
         resultats=results,
     )
 
-@st.cache_data(show_spinner=False)
-def tour_rapide_tel(session_key: str, _tours_df: pd.DataFrame, code_pilote: str):
+def tour_rapide_tel(_sess, code_pilote: str):
     """
-    Obtient les informations sur le tour le plus rapide d'un pilote donné.
-    
+    Obtient le tour le plus rapide d'un pilote et sa télémétrie.
+
+    IMPORTANT : prend l'objet Session FastF1 (pas un DataFrame détaché),
+    car `Lap.get_car_data()` a besoin du pointeur vers la session pour
+    accéder à `session.car_data` chargé en mémoire. Passer un DataFrame
+    copié (sess.laps.copy().reset_index()) brise ce lien et lève
+    `DataNotLoadedError`.
+
     Paramètres
     ----------
-    session_key : str
-        Clé unique de la session (non utilisée actuellement, pour compatibilité cache).
-    _tours_df : pd.DataFrame
-        DataFrame contenant tous les tours de la session.
+    _sess : fastf1.core.Session
+        Session FastF1 chargée. Le préfixe `_` désactive le hash Streamlit
+        (Session n'est pas hashable proprement).
     code_pilote : str
-        Code du pilote (ex: "HAM", "VER").
-    
+        Code 3-lettres (ex: "HAM", "VER") ou numéro.
+
     Retour
     ------
-    tuple
-        (Lap object du tour le plus rapide, DataFrame de télémetrie)
+    tuple[fastf1.core.Lap, pd.DataFrame]
+        Le tour le plus rapide et la télémétrie avec colonne `Distance`.
+
+    Raises
+    ------
+    ValueError
+        Si aucun tour valide n'est trouvé pour le pilote.
     """
-    tours_df = _tours_df.pick_driver(code_pilote)
-    plus_rapide = tours_df.pick_fastest()
-    tel = plus_rapide.get_car_data().add_distance()
-    return plus_rapide, tel
+    laps = _sess.laps.pick_drivers(code_pilote)
+    if laps is None or len(laps) == 0:
+        raise ValueError(f"Aucun tour pour le pilote {code_pilote}")
+
+    lap = _select_lap(laps, lap_number=None)
+    if lap is None:
+        raise ValueError(f"Aucun tour valide pour {code_pilote} (LapTime tous NaN ?)")
+
+    tel = lap.get_car_data().add_distance()
+    return lap, tel
 
 def _round_upto(annee: int, upto_event: str) -> int | None:
     """Retourne le numéro de manche (1-based) correspondant à `upto_event`."""
@@ -383,6 +398,7 @@ def classement_session(nb_tours: pd.DataFrame, results_df: pd.DataFrame, sess_ty
 
 
 
+@_safe_figure
 def figure_positions_par_tour(sess, pilotes=None):
     """
     Crée et renvoie une figure Matplotlib qui trace la position de chaque pilote
@@ -393,16 +409,27 @@ def figure_positions_par_tour(sess, pilotes=None):
     sess : fastf1.core.Session
         Session FastF1 déjà chargée (via `chargement_session`).
     pilotes : list[str] | None
-        Liste optionnelle de codes pilotes (abréviations 3 lettres) ou numéros.
-        Si None, tous les pilotes présents dans la session sont tracés.
+        Liste optionnelle de codes pilotes (abréviations 3 lettres). Si None,
+        tous les pilotes présents dans `sess.laps` sont tracés.
 
     Retour
     ------
     matplotlib.figure.Figure
-        Figure prête à être affichée dans Streamlit avec `st.pyplot(fig)`.
     """
-    # Palette de couleurs FastF1 (désactive le support timedelta car non nécessaire ici)
-    fastf1.plotting.setup_mpl(mpl_timedelta_support=False, color_scheme='fastf1')
+    # Validation entrée
+    if sess is None or not hasattr(sess, "laps"):
+        return _err_figure("Session invalide", figsize=(10, 5))
+
+    laps = sess.laps
+    if laps is None or len(laps) == 0:
+        return _err_figure("Aucun tour dans cette session", figsize=(10, 5))
+
+    if "Driver" not in laps.columns or "LapNumber" not in laps.columns or "Position" not in laps.columns:
+        return _err_figure(
+            "Colonnes manquantes (Driver/LapNumber/Position).\n"
+            "Cette visualisation n'est disponible que pour les courses (R) avec données de classement par tour.",
+            figsize=(10, 5),
+        )
 
     # Mapping Abbreviation -> BroadcastName pour des légendes lisibles
     name_map = {}
@@ -413,19 +440,15 @@ def figure_positions_par_tour(sess, pilotes=None):
     except Exception:
         pass
 
-    # Détermine la liste des pilotes à tracer
-    try:
-        if pilotes is None:
-            pilotes = list(sess.drivers)  # numéros
-        # `pick_drivers` accepte numéros ou abréviations
-    except Exception:
-        # fallback : déduire depuis le DataFrame des tours
-        try:
-            pilotes = sorted(sess.laps["Driver"].dropna().unique().tolist())
-        except Exception:
-            pilotes = []
+    # Liste de pilotes : abréviations présentes dans les laps (fiable)
+    if pilotes is None:
+        pilotes = sorted(laps["Driver"].dropna().unique().tolist())
 
-    fig, ax = plt.subplots(figsize=(8.0, 4.9))
+    if not pilotes:
+        return _err_figure("Aucun pilote détecté dans les tours", figsize=(10, 5))
+
+    # Figure (thème sombre)
+    fig, ax = plt.subplots(figsize=(10, 5))
     fig.patch.set_facecolor('#0d1117')
     ax.set_facecolor('#0d1117')
     ax.tick_params(colors="#e6edf3")
@@ -433,32 +456,60 @@ def figure_positions_par_tour(sess, pilotes=None):
         spine.set_edgecolor("#30363d")
     ax.xaxis.label.set_color("#e6edf3")
     ax.yaxis.label.set_color("#e6edf3")
+    ax.title.set_color("#e6edf3")
+    ax.grid(True, color="#21262d", linewidth=0.5, alpha=0.7)
 
+    # Tentative d'utiliser la palette FastF1 (couleurs équipes). Si elle échoue,
+    # fallback sur une cycle matplotlib + linestyle alterné — on ne saute PLUS
+    # silencieusement le pilote.
+    try:
+        fastf1.plotting.setup_mpl(mpl_timedelta_support=False, color_scheme='fastf1')
+    except Exception as exc:
+        logger.warning("setup_mpl FastF1 a échoué: %s", exc)
+
+    nb_tracé = 0
     for drv in pilotes:
-        try:
-            drv_laps = sess.laps.pick_drivers(drv)
-            if drv_laps is None or drv_laps.empty:
-                continue
-
-            # Identifiant style basé sur l'abréviation (colonne 'Driver') du premier tour
-            abb = drv_laps["Driver"].iloc[0]
-            style = fastf1.plotting.get_driver_style(
-                identifier=abb,
-                style=["color", "linestyle"],
-                session=sess,
-            )
-            label = name_map.get(abb, abb)
-
-            ax.plot(drv_laps["LapNumber"], drv_laps["Position"], label=label, **style)
-        except Exception:
+        drv_laps = laps[laps["Driver"] == drv].sort_values("LapNumber")
+        if drv_laps.empty:
             continue
+
+        abb = drv_laps["Driver"].iloc[0]
+        label = name_map.get(abb, abb)
+
+        # Style FastF1 si possible, sinon défaut
+        plot_kwargs = {"label": label, "linewidth": 1.6}
+        try:
+            style = fastf1.plotting.get_driver_style(
+                identifier=abb, style=["color", "linestyle"], session=sess,
+            )
+            plot_kwargs.update(style)
+        except Exception as exc:
+            logger.debug("get_driver_style(%s) a échoué: %s", abb, exc)
+
+        try:
+            ax.plot(drv_laps["LapNumber"], drv_laps["Position"], **plot_kwargs)
+            nb_tracé += 1
+        except Exception as exc:
+            logger.warning("plot(%s) a échoué: %s", abb, exc)
+
+    if nb_tracé == 0:
+        plt.close(fig)
+        return _err_figure(
+            "Aucune position n'a pu être tracée — vérifie que c'est bien une course (R).",
+            figsize=(10, 5),
+        )
 
     # Axes et légendes
     ax.set_ylim([20.5, 0.5])
     ax.set_yticks([1, 5, 10, 15, 20])
     ax.set_xlabel("Tour")
     ax.set_ylabel("Position")
-    ax.legend(bbox_to_anchor=(1.0, 1.02), title="Pilotes")
+    leg = ax.legend(
+        bbox_to_anchor=(1.02, 1.0), loc="upper left", title="Pilotes",
+        fontsize=8, frameon=False, labelcolor="#e6edf3",
+    )
+    if leg is not None:
+        leg.get_title().set_color("#e6edf3")
     plt.tight_layout()
 
     return fig
