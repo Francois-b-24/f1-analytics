@@ -1,0 +1,20 @@
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = true
+maxUploadSize = 50
+maxMessageSize = 200
+
+[browser]
+gatherUsageStats = false
+
+[logger]
+level = "info"
+messageFormat = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+[theme]
+base = "dark"
+primaryColor = "#E10600"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1A1F2C"
+textColor = "#FAFAFA"

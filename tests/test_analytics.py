@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from scr.analytics import (
+from src.analytics import (
     sector_times_long,
     sector_best_per_driver,
     stint_degradation,

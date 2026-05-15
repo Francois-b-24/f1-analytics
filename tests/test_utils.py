@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 import pandas as pd
-from scr.utils import formatage_timedelta, secs
+from src.utils import formatage_timedelta, secs
 
 def test_formatage_timedelta_none():
     assert formatage_timedelta(None) == '—'

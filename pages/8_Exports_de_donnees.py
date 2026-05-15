@@ -1,7 +1,7 @@
 import streamlit as st
-from scr.config import configure_page
-from scr.ui import selections_courantes
-from scr.data import chargement_session
+from src.config import configure_page
+from src.ui import selections_courantes
+from src.data import chargement_session
 
 configure_page("F1 Analytics – Export & Données")
 

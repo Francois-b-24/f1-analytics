@@ -2,9 +2,9 @@ import streamlit as st
 import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-from scr.config import configure_page
-from scr.ui import selections_courantes
-from scr.data import chargement_session
+from src.config import configure_page
+from src.ui import selections_courantes
+from src.data import chargement_session
 
 configure_page("F1 Analytics – Météo")
 

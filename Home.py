@@ -1,8 +1,8 @@
 import streamlit as st
-from scr.config import configure_page_home
-from scr.ui import selecteurs_session, sidebar_hint_once
-from scr.data import chargement_session
-from scr.utils import formatage_timedelta
+from src.config import configure_page_home
+from src.ui import selecteurs_session, sidebar_hint_once
+from src.data import chargement_session
+from src.utils import formatage_timedelta
 import plotly.express as px
 import pandas as pd
 from streamlit_extras.colored_header import colored_header
@@ -39,6 +39,9 @@ if not loaded:
     st.stop()
 
 # Chargement du WEEK-END de Grand prix
+import logging
+_logger = logging.getLogger("f1_analytics.home")
+
 try:
     _data = chargement_session(annee, grand_prix, session_type)
     session = session_type
@@ -48,9 +51,24 @@ try:
     meteo = _data['meteo']
     resultats = _data['resultats']
 except Exception as e:
-    st.info("Données indisponibles pour cette sélection (connexion, calendrier ou session non disponible).")
-    with st.expander("Détails techniques (debug)"):
-        st.write(e)
+    _logger.exception("Échec chargement session %s / %s / %s", annee, grand_prix, session_type)
+    err_type = type(e).__name__
+    msg = str(e) or "(pas de message)"
+
+    if "404" in msg or "not found" in msg.lower() or "no data" in msg.lower():
+        st.error(f"❌ Session indisponible : {annee} – {grand_prix} ({session_type}). Cette session n'a pas encore eu lieu ou n'est pas publiée.")
+    elif "connection" in msg.lower() or "timeout" in msg.lower() or err_type in ("ConnectionError", "Timeout"):
+        st.error("🔌 Problème de connexion à l'API F1. Réessaie dans quelques instants.")
+    else:
+        st.error(f"⚠️ Impossible de charger cette session : **{err_type}** — {msg}")
+
+    col_a, col_b = st.columns([1, 4])
+    with col_a:
+        if st.button("🔄 Réessayer", key="retry_load"):
+            chargement_session.clear()
+            st.rerun()
+    with st.expander("Détails techniques"):
+        st.code(f"{err_type}: {msg}")
     st.stop()
 
 

@@ -1,8 +1,8 @@
 import streamlit as st
-from scr.config import configure_page
-from scr.ui import selections_courantes
-from scr.data import chargement_session
-from scr.utils import formatage_timedelta
+from src.config import configure_page
+from src.ui import selections_courantes
+from src.data import chargement_session
+from src.utils import formatage_timedelta
 
 configure_page("F1 Analytics – Arrêts aux stands")
 

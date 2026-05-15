@@ -2,11 +2,11 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 
-from scr.config import configure_page
-from scr.ui import selecteurs_pilotes, selections_courantes
-from scr.data import chargement_session, tour_rapide_tel
-from scr.utils import formatage_timedelta
-from scr.analytics import delta_time_vs_distance
+from src.config import configure_page
+from src.ui import selecteurs_pilotes, selections_courantes
+from src.data import chargement_session, tour_rapide_tel
+from src.utils import formatage_timedelta
+from src.analytics import delta_time_vs_distance
 
 from streamlit_extras.colored_header import colored_header
 

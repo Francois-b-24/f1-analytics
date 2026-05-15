@@ -1,7 +1,7 @@
 import streamlit as st
-from scr.config import configure_page
-from scr.data import figure_positions_par_tour, chargement_session
-from scr.ui import selections_courantes
+from src.config import configure_page
+from src.data import figure_positions_par_tour, chargement_session
+from src.ui import selections_courantes
 
 configure_page("F1 Analytics – Performances")
 

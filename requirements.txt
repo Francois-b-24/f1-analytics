@@ -1,8 +1,8 @@
-streamlit
-fastf1
-pandas
-numpy
-plotly
-matplotlib
-scikit-learn
-streamlit-extras
+streamlit==1.50.0
+fastf1==3.6.1
+pandas==2.3.3
+numpy==2.2.6
+plotly==6.4.0
+matplotlib==3.9.4
+streamlit-extras==0.7.8
+sentry-sdk==2.18.0

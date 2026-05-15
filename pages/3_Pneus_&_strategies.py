@@ -4,10 +4,10 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-from scr.config import configure_page
-from scr.ui import selections_courantes
-from scr.data import chargement_session
-from scr.analytics import (
+from src.config import configure_page
+from src.ui import selections_courantes
+from src.data import chargement_session
+from src.analytics import (
     stint_degradation,
     stint_degradation_fits,
     tyre_degradation_matrix,

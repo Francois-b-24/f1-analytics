@@ -1,8 +1,8 @@
-from scr.data import figure_carte_vitesse, figure_carte_rapports, figure_carte_virages
+from src.data import figure_carte_vitesse, figure_carte_rapports, figure_carte_virages
 import streamlit as st
-from scr.config import configure_page
-from scr.data import chargement_session
-from scr.ui import selections_courantes, selecteur_pilote_unique
+from src.config import configure_page
+from src.data import chargement_session
+from src.ui import selections_courantes, selecteur_pilote_unique
 from streamlit_extras.colored_header import colored_header
 
 

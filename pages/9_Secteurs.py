@@ -1,10 +1,10 @@
 import streamlit as st
 import plotly.express as px
 
-from scr.config import configure_page
-from scr.ui import selections_courantes
-from scr.data import chargement_session
-from scr.analytics import sector_times_long, sector_best_per_driver
+from src.config import configure_page
+from src.ui import selections_courantes
+from src.data import chargement_session
+from src.analytics import sector_times_long, sector_best_per_driver
 from streamlit_extras.colored_header import colored_header
 
 
