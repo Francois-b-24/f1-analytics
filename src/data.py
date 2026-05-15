@@ -105,38 +105,61 @@ def _safe_figure(fn):
 
     return wrapper
 
-@st.cache_resource(show_spinner="Chargement de la session F1…", max_entries=4)
-def chargement_session(annee: int, course: str, sess_type: str):
+def _session_has_pos_data(sess) -> bool:
+    """Vérifie qu'une session FastF1 a bien ses pos_data/car_data chargés.
+
+    `st.cache_resource` peut renvoyer une session dont les attributs internes
+    (_pos_data, _car_data) ne sont plus initialisés après une éviction
+    partielle ou un cycle GC. Dans ce cas, get_pos_data/get_telemetry lèvent
+    DataNotLoadedError. On vérifie via les flags internes de FastF1.
     """
-    Charge une session F1 (week-end de Grand Prix) et retourne les données principales.
+    try:
+        # Accès non-throwing aux flags de chargement internes
+        loaded = getattr(sess, "_loaded", None) or {}
+        if isinstance(loaded, dict):
+            # FastF1 3.x : dict avec clés "laps", "telemetry", "weather", "messages"
+            return bool(loaded.get("telemetry", False))
+        # Fallback : tenter d'accéder à pos_data via la propriété privée
+        return getattr(sess, "_pos_data", None) is not None
+    except Exception:
+        return False
 
-    Utilise `st.cache_resource` (et non `cache_data`) car l'objet `Session` FastF1
-    n'est pas sérialisable proprement par Streamlit. `max_entries=4` borne la
-    consommation mémoire (Streamlit Cloud ~ 1 GB RAM).
 
-    Paramètres
-    ----------
-    annee : int
-        L'année de la saison (ex: 2024).
-    course : str
-        Le nom du Grand Prix (ex: "Australian Grand Prix").
-    sess_type : str
-        Le type de session ("FP1", "FP2", "FP3", "Q", "R").
-
-    Retour
-    ------
-    dict
-        Dictionnaire contenant :
-        - session : objet Session FastF1
-        - nom : nom de la session
-        - tours : DataFrame des tours
-        - pilotes : liste des codes pilotes
-        - meteo : DataFrame des données météo
-        - resultats : DataFrame des résultats officiels
-    """
+def _build_session(annee: int, course: str, sess_type: str):
+    """Crée et charge une session FastF1 fraîche (non cachée)."""
     logger.info("Chargement session %s / %s / %s", annee, course, sess_type)
     sess = fastf1.get_session(annee, course, sess_type)
-    sess.load()  # laps + telemetry + weather + results
+    sess.load()  # laps + telemetry + weather + messages (par défaut)
+    return sess
+
+
+def _get_or_reload_session(annee: int, course: str, sess_type: str):
+    """Renvoie un objet Session live. Utilise un cache `st.session_state`
+    par utilisateur — pas `cache_resource` qui peut perdre les attributs
+    internes (_pos_data, _car_data) entre runs et casser get_pos_data().
+
+    Si une session existe en session_state mais a perdu ses données, on
+    recharge depuis le cache disque FastF1 (rapide).
+    """
+    key = f"_f1_sess_{annee}_{course}_{sess_type}"
+    sess = st.session_state.get(key)
+    if sess is not None and _session_has_pos_data(sess):
+        return sess
+    # (Re)charge
+    sess = _build_session(annee, course, sess_type)
+    st.session_state[key] = sess
+    return sess
+
+
+@st.cache_data(show_spinner="Chargement de la session F1…", max_entries=4, ttl=3600)
+def _chargement_dataframes(annee: int, course: str, sess_type: str):
+    """Charge les DataFrames sérialisables (tours, météo, résultats).
+
+    Ces données sont stables et cachables proprement par Streamlit
+    (pickle DataFrame). L'objet Session live, lui, est obtenu séparément
+    via `_get_or_reload_session` pour éviter les pertes d'attributs.
+    """
+    sess = _build_session(annee, course, sess_type)
 
     tours = sess.laps.copy().reset_index(drop=True)
     if 'LapTime' in tours:
@@ -161,15 +184,55 @@ def chargement_session(annee: int, course: str, sess_type: str):
         logger.info("Résultats officiels indisponibles: %s", exc)
         results = pd.DataFrame()
 
+    nom = sess.name
+    # On garde la session en session_state pour réutilisation par les viz
+    key = f"_f1_sess_{annee}_{course}_{sess_type}"
+    st.session_state[key] = sess
+
     logger.info("Session chargée: %d tours, %d pilotes", len(tours), len(driver_codes))
     return dict(
-        session=sess,
-        nom=sess.name,
+        nom=nom,
         tours=tours,
         pilotes=driver_codes,
         meteo=meteo,
         resultats=results,
     )
+
+
+def chargement_session(annee: int, course: str, sess_type: str):
+    """
+    Charge une session F1 et retourne ses données.
+
+    Les DataFrames (tours, météo, résultats) sont cachés via `cache_data`
+    pour rapidité. L'objet Session live est récupéré séparément depuis
+    `st.session_state` (ou rechargé depuis le cache disque FastF1 si nécessaire)
+    pour préserver l'accès à `get_pos_data()`, `get_car_data()`, etc.
+
+    Paramètres
+    ----------
+    annee : int
+    course : str
+        Nom du Grand Prix (ex: "Australian Grand Prix").
+    sess_type : str
+        "FP1", "FP2", "FP3", "Q", "R".
+
+    Retour
+    ------
+    dict
+        - session : objet Session FastF1 (toujours frais)
+        - nom : nom de la session
+        - tours : DataFrame des tours
+        - pilotes : liste des codes pilotes
+        - meteo : DataFrame météo
+        - resultats : DataFrame résultats officiels
+    """
+    dfs = _chargement_dataframes(annee, course, sess_type)
+    sess = _get_or_reload_session(annee, course, sess_type)
+    return {**dfs, "session": sess}
+
+
+# Expose .clear() comme avant pour Home.py (bouton "Réessayer")
+chargement_session.clear = _chargement_dataframes.clear
 
 def tour_rapide_tel(_sess, code_pilote: str):
     """
