@@ -60,82 +60,88 @@ def _get_best_lap_no(d):
 
 
 colored_header("Télémétries sur le tour le plus rapide", description=None, color_name="blue-70")
-try:
-    d1_fast, tel_1 = tour_rapide_tel(data, pilote_1)
-    fig = px.line(
-        tel_1, x='Distance', y='Speed',
-        title=f"Tour le plus rapide – {pilote_1}",
-        labels={'Speed': 'Vitesse (km/h)', 'Distance': 'Distance (m)'},
+_tel_dispo = data.get("tel_par_pilote", {})
+
+if not _tel_dispo:
+    st.info(
+        "⏳ Télémétrie indisponible pour cette session. "
+        "Les données sont publiées par l'API F1 avec un délai de 24–48 h après la course. "
+        "Sélectionne une session 2025 ou antérieure pour accéder à la télémétrie."
     )
-    d2_fast = None
-    tel_2 = None
-    if pilote_2:
-        d2_fast, tel_2 = tour_rapide_tel(data, pilote_2)
-        fig.add_scatter(x=tel_2['Distance'], y=tel_2['Speed'], mode='lines', name=pilote_2)
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Metrics — ne génère les colonnes que pour les pilotes réellement présents
-    if pilote_2:
-        c1, c2, c3 = st.columns(3)
-    else:
-        c1, c2 = st.columns(2)
-        c3 = None
-
-    with c1:
-        st.metric(f"Meilleur tour {pilote_1}", formatage_timedelta(d1_fast['LapTime']))
-        lap_no_1 = _get_best_lap_no(d1_fast)
-        if lap_no_1 is not None:
-            st.metric("Tour du meilleur tour", f"{lap_no_1}")
-
-    if pilote_2:
-        with c2:
-            st.metric(f"Meilleur tour {pilote_2}", formatage_timedelta(d2_fast['LapTime']))
-            lap_no_2 = _get_best_lap_no(d2_fast)
-            if lap_no_2 is not None:
-                st.metric("Tour du meilleur tour", f"{lap_no_2}")
-        with c3:
-            diff = abs(d2_fast['LapTime'] - d1_fast['LapTime'])
-            st.metric("Différence", formatage_timedelta(diff))
-
-    # --- F3 : Delta time overlay (si 2 pilotes sélectionnés) ---
-    if pilote_2 and tel_2 is not None:
-        colored_header(
-            "Delta time cumulé (référence : pilote 1)",
-            description="Courbe d'écart temporel aligné sur la distance parcourue. "
-                        "Delta > 0 ⇒ pilote 2 en retard ; pentes = zones d'avantage.",
-            color_name="blue-70",
+elif pilote_1 not in _tel_dispo:
+    st.warning(f"Télémétrie non disponible pour {pilote_1} sur cette session.")
+else:
+    try:
+        d1_fast, tel_1 = tour_rapide_tel(data, pilote_1)
+        fig = px.line(
+            tel_1, x='Distance', y='Speed',
+            title=f"Tour le plus rapide – {pilote_1}",
+            labels={'Speed': 'Vitesse (km/h)', 'Distance': 'Distance (m)'},
         )
-        delta_df = delta_time_vs_distance(tel_1, tel_2)
-        if not delta_df.empty:
-            fig_delta = go.Figure()
-            fig_delta.add_trace(
-                go.Scatter(
-                    x=delta_df["Distance"],
-                    y=delta_df["Delta"],
-                    mode="lines",
-                    name=f"Δ ({pilote_2} − {pilote_1})",
-                    line=dict(width=2),
-                )
-            )
-            fig_delta.add_hline(y=0, line_dash="dash", line_color="gray")
-            fig_delta.update_layout(
-                xaxis_title="Distance (m)",
-                yaxis_title=f"Δ temps (s) — négatif = {pilote_2} devant",
-                hovermode="x unified",
-            )
-            st.plotly_chart(fig_delta, use_container_width=True)
-            final_delta = float(delta_df["Delta"].iloc[-1])
-            st.caption(
-                f"Écart final sur le tour : **{final_delta:+.3f} s** "
-                f"({'avantage ' + pilote_1 if final_delta > 0 else 'avantage ' + pilote_2})"
-            )
+        d2_fast = None
+        tel_2 = None
+        if pilote_2:
+            if pilote_2 in _tel_dispo:
+                d2_fast, tel_2 = tour_rapide_tel(data, pilote_2)
+                fig.add_scatter(x=tel_2['Distance'], y=tel_2['Speed'], mode='lines', name=pilote_2)
+            else:
+                st.caption(f"Télémétrie non disponible pour {pilote_2}.")
+        st.plotly_chart(fig, use_container_width=True)
+
+        if pilote_2 and d2_fast:
+            c1, c2, c3 = st.columns(3)
         else:
-            st.info("Delta time indisponible (télémétries incompatibles).")
-except Exception as e:
-    st.warning(f"Télémétrie indisponible : **{type(e).__name__}** — {e}")
-    with st.expander("Détails techniques"):
-        import traceback
-        st.code(traceback.format_exc())
+            c1, c2 = st.columns(2)
+            c3 = None
+
+        with c1:
+            st.metric(f"Meilleur tour {pilote_1}", formatage_timedelta(d1_fast['LapTime']))
+            lap_no_1 = _get_best_lap_no(d1_fast)
+            if lap_no_1 is not None:
+                st.metric("Tour n°", f"{lap_no_1}")
+
+        if pilote_2 and d2_fast:
+            with c2:
+                st.metric(f"Meilleur tour {pilote_2}", formatage_timedelta(d2_fast['LapTime']))
+                lap_no_2 = _get_best_lap_no(d2_fast)
+                if lap_no_2 is not None:
+                    st.metric("Tour n°", f"{lap_no_2}")
+            with c3:
+                diff = abs(d2_fast['LapTime'] - d1_fast['LapTime'])
+                st.metric("Différence", formatage_timedelta(diff))
+
+        if pilote_2 and tel_2 is not None:
+            colored_header(
+                "Delta time cumulé (référence : pilote 1)",
+                description="Delta > 0 ⇒ pilote 2 en retard ; pentes = zones d'avantage.",
+                color_name="blue-70",
+            )
+            delta_df = delta_time_vs_distance(tel_1, tel_2)
+            if not delta_df.empty:
+                fig_delta = go.Figure()
+                fig_delta.add_trace(go.Scatter(
+                    x=delta_df["Distance"], y=delta_df["Delta"],
+                    mode="lines", name=f"Δ ({pilote_2} − {pilote_1})", line=dict(width=2),
+                ))
+                fig_delta.add_hline(y=0, line_dash="dash", line_color="gray")
+                fig_delta.update_layout(
+                    xaxis_title="Distance (m)",
+                    yaxis_title=f"Δ temps (s) — négatif = {pilote_2} devant",
+                    hovermode="x unified",
+                )
+                st.plotly_chart(fig_delta, use_container_width=True)
+                final_delta = float(delta_df["Delta"].iloc[-1])
+                st.caption(
+                    f"Écart final : **{final_delta:+.3f} s** "
+                    f"({'avantage ' + pilote_1 if final_delta > 0 else 'avantage ' + pilote_2})"
+                )
+            else:
+                st.info("Delta time indisponible.")
+    except Exception as e:
+        st.warning(f"Erreur télémétrie : **{type(e).__name__}** — {e}")
+        with st.expander("Détails techniques"):
+            import traceback
+            st.code(traceback.format_exc())
 
 
 colored_header("Informations par tour un pilote", description=None, color_name="blue-70")

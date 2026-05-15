@@ -27,9 +27,17 @@ if not pilote:
     st.warning("Sélectionne un pilote dans la barre latérale pour afficher les cartes.")
     st.stop()
 
+if not tel_par_pilote:
+    st.info(
+        "⏳ Télémétrie indisponible pour cette session. "
+        "Les données sont publiées avec un délai de 24–48 h après la course. "
+        "Sélectionne une session 2025 ou antérieure."
+    )
+    st.stop()
+
 tel = tel_par_pilote.get(pilote)
 if tel is None or tel.empty:
-    st.warning(f"Télémétrie indisponible pour {pilote} (données non chargées pour cette session).")
+    st.warning(f"Télémétrie non disponible pour {pilote} sur cette session.")
     st.stop()
 
 colored_header("Carte du circuit", description=None, color_name="blue-70")
