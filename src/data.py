@@ -15,31 +15,95 @@ from matplotlib.collections import LineCollection
 logger = logging.getLogger("f1_analytics.data")
 
 
-def _select_lap(laps: pd.DataFrame, lap_number: int | None):
+def _select_lap(laps, lap_number: int | None):
     """
-    Sélectionne un objet Lap unique depuis un DataFrame de tours FastF1.
+    Sélectionne un objet `fastf1.core.Lap` (pas une pd.Series) depuis un
+    DataFrame de tours FastF1.
 
-    - Si `lap_number` est fourni, retourne ce tour (fallback sur le plus rapide si absent).
-    - Sinon retourne le tour le plus rapide.
+    Garantit que `get_telemetry()` / `get_pos_data()` sont appelables sur
+    le retour — fait un `.iloc[[0]].pick_fastest()` plutôt que `.iloc[0]`
+    qui renverrait une Series sans ces méthodes.
 
-    Préserve le type `fastf1.core.Lap` nécessaire à `get_telemetry()` / `get_pos_data()`.
+    Retourne `None` si rien d'utilisable (le caller doit gérer ce cas).
     """
-    if laps is None or laps.empty:
+    if laps is None or len(laps) == 0:
         return None
+
+    # 1. Cas tour spécifique
     if lap_number is not None:
-        subset = laps[laps["LapNumber"] == lap_number]
-        if subset is not None and not subset.empty:
-            try:
-                # pick_fastest sur un sous-ensemble d'une seule ligne renvoie
-                # bien un objet Lap typé (et non une pd.Series).
-                return subset.pick_fastest()
-            except Exception as exc:
-                logger.debug("pick_fastest(subset) a échoué: %s", exc)
+        try:
+            subset = laps[laps["LapNumber"] == lap_number]
+            if subset is not None and len(subset) > 0:
+                lap = subset.pick_fastest()
+                if lap is not None and hasattr(lap, "get_telemetry"):
+                    return lap
+        except Exception as exc:
+            logger.debug("pick_fastest(subset lap_number=%s) a échoué: %s", lap_number, exc)
+
+    # 2. Tour le plus rapide global
     try:
-        return laps.pick_fastest()
+        # Filtrer d'abord les tours avec un LapTime valide (sinon pick_fastest peut renvoyer NaN/Series)
+        if "LapTime" in laps.columns:
+            valid = laps[laps["LapTime"].notna()]
+            if len(valid) > 0:
+                lap = valid.pick_fastest()
+                if lap is not None and hasattr(lap, "get_telemetry"):
+                    return lap
+        lap = laps.pick_fastest()
+        if lap is not None and hasattr(lap, "get_telemetry"):
+            return lap
     except Exception as exc:
         logger.warning("pick_fastest(laps) a échoué: %s", exc)
-        return None
+
+    # 3. Fallback : récupérer la première ligne avec LapTime non-null
+    try:
+        if "LapTime" in laps.columns:
+            valid = laps[laps["LapTime"].notna()]
+            if len(valid) > 0:
+                # `.iloc[[0]].pick_fastest()` retourne bien un Lap, pas une Series
+                lap = valid.iloc[[0]].pick_fastest()
+                if lap is not None and hasattr(lap, "get_telemetry"):
+                    return lap
+    except Exception as exc:
+        logger.warning("fallback _select_lap a échoué: %s", exc)
+
+    return None
+
+
+def _err_figure(msg: str, *, figsize=(12, 6.75), dpi=100):
+    """Crée une figure matplotlib unique qui affiche un message d'erreur lisible.
+
+    Thème sombre cohérent avec l'app — texte clair sur fond anthracite.
+    """
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    fig.patch.set_facecolor("#0d1117")
+    ax.set_facecolor("#0d1117")
+    ax.text(0.5, 0.5, msg, ha="center", va="center",
+            color="#e6edf3", fontsize=12, wrap=True)
+    ax.axis("off")
+    return fig
+
+
+def _safe_figure(fn):
+    """Décorateur : enveloppe une fonction de génération de figure dans un
+    try/except global qui retourne une `_err_figure` lisible au lieu de
+    crasher la page Streamlit. Log la trace complète via logger.exception.
+    """
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            logger.exception("Échec de %s", fn.__name__)
+            return _err_figure(
+                f"Erreur lors du rendu : {type(exc).__name__}\n{exc}",
+                figsize=kwargs.get("figsize", (12, 6.75)),
+                dpi=kwargs.get("dpi", 100),
+            )
+
+    return wrapper
 
 @st.cache_resource(show_spinner="Chargement de la session F1…", max_entries=4)
 def chargement_session(annee: int, course: str, sess_type: str):
@@ -362,8 +426,13 @@ def figure_positions_par_tour(sess, pilotes=None):
             pilotes = []
 
     fig, ax = plt.subplots(figsize=(8.0, 4.9))
-    fig.patch.set_facecolor('black')
-    ax.set_facecolor('black')
+    fig.patch.set_facecolor('#0d1117')
+    ax.set_facecolor('#0d1117')
+    ax.tick_params(colors="#e6edf3")
+    for spine in ax.spines.values():
+        spine.set_edgecolor("#30363d")
+    ax.xaxis.label.set_color("#e6edf3")
+    ax.yaxis.label.set_color("#e6edf3")
 
     for drv in pilotes:
         try:
@@ -395,6 +464,7 @@ def figure_positions_par_tour(sess, pilotes=None):
     return fig
 
 
+@_safe_figure
 def figure_carte_vitesse(sess,
                          pilote,
                          lap_number: int | None = None,
@@ -447,37 +517,31 @@ def figure_carte_vitesse(sess,
         pass
 
     # Récupérer le tour
-    laps = sess.laps.pick_drivers(drv_identifier)
-    if laps is None or laps.empty:
-        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-        fig.patch.set_facecolor('white')
-        ax.set_facecolor('white')
-        ax.text(0.5, 0.5, "Aucun tour pour ce pilote", ha='center', va='center')
-        ax.axis('off')
-        return fig
+    try:
+        laps = sess.laps.pick_drivers(drv_identifier)
+    except Exception as exc:
+        logger.exception("pick_drivers(%s) a échoué", drv_identifier)
+        return _err_figure(f"Pilote introuvable : {drv_identifier}\n{type(exc).__name__}: {exc}", figsize=figsize, dpi=dpi)
+
+    if laps is None or len(laps) == 0:
+        return _err_figure(f"Aucun tour pour le pilote {drv_identifier}", figsize=figsize, dpi=dpi)
 
     lap = _select_lap(laps, lap_number)
     if lap is None:
-        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-        fig.patch.set_facecolor('white')
-        ax.set_facecolor('white')
-        ax.text(0.5, 0.5, "Tour indisponible", ha='center', va='center')
-        ax.axis('off')
-        return fig
+        return _err_figure(f"Tour indisponible pour {drv_identifier}", figsize=figsize, dpi=dpi)
 
-    # Télémetrie avec position XY et vitesse
+    # Télémétrie
     try:
         tel = lap.get_telemetry()
     except Exception as exc:
-        logger.warning("get_telemetry a échoué (%s), fallback attribut legacy", exc)
-        tel = getattr(lap, 'telemetry', None)
+        logger.exception("get_telemetry a échoué pour %s", drv_identifier)
+        return _err_figure(f"Télémétrie indisponible : {type(exc).__name__}: {exc}", figsize=figsize, dpi=dpi)
+
     if tel is None or len(tel) == 0:
-        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-        fig.patch.set_facecolor('white')
-        ax.set_facecolor('white')
-        ax.text(0.5, 0.5, "Télémetrie indisponible", ha='center', va='center')
-        ax.axis('off')
-        return fig
+        return _err_figure(f"Télémétrie vide pour {drv_identifier}", figsize=figsize, dpi=dpi)
+
+    if not all(c in tel.columns for c in ("X", "Y", "Speed")):
+        return _err_figure("Colonnes X/Y/Speed manquantes dans la télémétrie", figsize=figsize, dpi=dpi)
 
     # Variables de tracé
     x = tel['X']
@@ -489,8 +553,8 @@ def figure_carte_vitesse(sess,
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
 
     fig, ax = plt.subplots(sharex=True, sharey=True, figsize=figsize, dpi=dpi)
-    fig.patch.set_facecolor('black')
-    ax.set_facecolor('black')
+    fig.patch.set_facecolor('#0d1117')
+    ax.set_facecolor('#0d1117')
 
     # Titre
     try:
@@ -507,14 +571,14 @@ def figure_carte_vitesse(sess,
             title_id = inv.get(str(drv_identifier), str(drv_identifier))
     except Exception:
         pass
-    fig.suptitle(f"{gp_name} {year} – {title_id} – Vitesse", size=18, y=0.97)
+    fig.suptitle(f"{gp_name} {year} – {title_id} – Vitesse", size=18, y=0.97, color="#e6edf3")
 
     # Marges et axes
     plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.12)
     ax.axis('off')
 
-    # Ligne de fond (piste)
-    ax.plot(x, y, color='black', linestyle='-', linewidth=linewidth_track, zorder=0)
+    # Ligne de fond (piste) — gris foncé pour rester visible sur fond anthracite
+    ax.plot(x, y, color='#30363d', linestyle='-', linewidth=linewidth_track, zorder=0)
 
     # Ligne colorée par la vitesse
     norm = plt.Normalize(speed.min(), speed.max())
@@ -522,17 +586,25 @@ def figure_carte_vitesse(sess,
     lc.set_array(speed)
     ax.add_collection(lc)
 
+    # Ajustement des limites (LineCollection ne le fait pas seul)
+    ax.set_xlim(x.min(), x.max())
+    ax.set_ylim(y.min(), y.max())
+    ax.set_aspect('equal')
+
     # Barre de couleurs
     if show_colorbar:
-        cbaxes = fig.add_axes([0.25, 0.05, 0.5, 0.05])
+        cbaxes = fig.add_axes([0.25, 0.05, 0.5, 0.04])
         normlegend = mpl.colors.Normalize(vmin=float(speed.min()), vmax=float(speed.max()))
-        mpl.colorbar.ColorbarBase(cbaxes, norm=normlegend, cmap=cmap, orientation="horizontal")
+        cb = mpl.colorbar.ColorbarBase(cbaxes, norm=normlegend, cmap=cmap, orientation="horizontal")
+        cb.set_label("Vitesse (km/h)", color="#e6edf3")
+        cb.ax.tick_params(colors="#e6edf3")
+        cb.outline.set_edgecolor("#30363d")
 
-    plt.tight_layout()
     return fig
 
 
 # --- Visualisation des rapports engagés (nGear) le long de la trajectoire ---
+@_safe_figure
 def figure_carte_rapports(sess,
                            pilote,
                            lap_number: int | None = None,
@@ -589,37 +661,31 @@ def figure_carte_rapports(sess,
         pass
 
     # Sélection du tour
-    laps = sess.laps.pick_drivers(drv_identifier)
-    if laps is None or laps.empty:
-        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-        fig.patch.set_facecolor('white')
-        ax.set_facecolor('white')
-        ax.text(0.5, 0.5, "Aucun tour pour ce pilote", ha='center', va='center')
-        ax.axis('off')
-        return fig
+    try:
+        laps = sess.laps.pick_drivers(drv_identifier)
+    except Exception as exc:
+        logger.exception("pick_drivers(%s) a échoué (rapports)", drv_identifier)
+        return _err_figure(f"Pilote introuvable : {drv_identifier}\n{type(exc).__name__}: {exc}", figsize=figsize, dpi=dpi)
+
+    if laps is None or len(laps) == 0:
+        return _err_figure(f"Aucun tour pour le pilote {drv_identifier}", figsize=figsize, dpi=dpi)
 
     lap = _select_lap(laps, lap_number)
     if lap is None:
-        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-        fig.patch.set_facecolor('white')
-        ax.set_facecolor('white')
-        ax.text(0.5, 0.5, "Tour indisponible", ha='center', va='center')
-        ax.axis('off')
-        return fig
+        return _err_figure(f"Tour indisponible pour {drv_identifier}", figsize=figsize, dpi=dpi)
 
-    # Télémetrie et données
+    # Télémétrie
     try:
         tel = lap.get_telemetry()
     except Exception as exc:
-        logger.warning("get_telemetry (rapports) a échoué (%s), fallback legacy", exc)
-        tel = getattr(lap, 'telemetry', None)
+        logger.exception("get_telemetry (rapports) a échoué pour %s", drv_identifier)
+        return _err_figure(f"Télémétrie indisponible : {type(exc).__name__}: {exc}", figsize=figsize, dpi=dpi)
+
     if tel is None or len(tel) == 0:
-        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-        fig.patch.set_facecolor('white')
-        ax.set_facecolor('white')
-        ax.text(0.5, 0.5, "Télémetrie indisponible", ha='center', va='center')
-        ax.axis('off')
-        return fig
+        return _err_figure(f"Télémétrie vide pour {drv_identifier}", figsize=figsize, dpi=dpi)
+
+    if not all(c in tel.columns for c in ("X", "Y", "nGear")):
+        return _err_figure("Colonnes X/Y/nGear manquantes dans la télémétrie", figsize=figsize, dpi=dpi)
 
     x = np.array(tel['X'].values)
     y = np.array(tel['Y'].values)
@@ -632,8 +698,8 @@ def figure_carte_rapports(sess,
 
     # Figure
     fig, ax = plt.subplots(sharex=True, sharey=True, figsize=figsize, dpi=dpi)
-    fig.patch.set_facecolor('black')
-    ax.set_facecolor('black')
+    fig.patch.set_facecolor('#0d1117')
+    ax.set_facecolor('#0d1117')
 
     # Titre
     try:
@@ -649,10 +715,10 @@ def figure_carte_rapports(sess,
             title_id = inv.get(str(drv_identifier), str(drv_identifier))
     except Exception:
         pass
-    fig.suptitle(f"{gp_name} {year} – {title_id} – Rapports", size=18, y=0.97)
+    fig.suptitle(f"{gp_name} {year} – {title_id} – Rapports", size=18, y=0.97, color="#e6edf3")
 
-    # Fond de piste
-    ax.plot(x, y, color='black', linestyle='-', linewidth=linewidth_track, zorder=0)
+    # Fond de piste — gris foncé pour rester visible sur fond anthracite
+    ax.plot(x, y, color='#30363d', linestyle='-', linewidth=linewidth_track, zorder=0)
 
     # Collection de lignes colorées par rapport
     lc = LineCollection(segments, norm=plt.Normalize(1, cmap.N + 1), cmap=cmap)
@@ -660,9 +726,10 @@ def figure_carte_rapports(sess,
     lc.set_linewidth(linewidth_gears)
     ax.add_collection(lc)
 
-    # Aspect & axes
-    ax.axis('equal')
-    ax.tick_params(labelleft=False, left=False, labelbottom=False, bottom=False)
+    # Aspect & axes — set_xlim/set_ylim avant axis('off')
+    ax.set_xlim(x.min(), x.max())
+    ax.set_ylim(y.min(), y.max())
+    ax.set_aspect('equal')
     ax.axis('off')
 
     # Colorbar (ticks centrés sur chaque couleur)
@@ -670,23 +737,26 @@ def figure_carte_rapports(sess,
         cbar = plt.colorbar(mappable=lc, ax=ax, label="Rapport", boundaries=np.arange(1, 10), fraction=0.046, pad=0.04)
         cbar.set_ticks(np.arange(1.5, 9.5))
         cbar.set_ticklabels(np.arange(1, 9))
+        cbar.set_label("Rapport", color="#e6edf3")
+        cbar.ax.tick_params(colors="#e6edf3")
+        cbar.outline.set_edgecolor("#30363d")
 
-    plt.tight_layout()
     return fig
 
 
 # --- Carte du circuit avec numérotation des virages ---
 
+@_safe_figure
 def figure_carte_virages(sess,
                           pilote: str | int | None = None,
                           lap_number: int | None = None,
                           figsize=(12, 6.75),
                           dpi=100,
-                          track_color='black',
+                          track_color='#e6edf3',
                           track_linewidth: float = 2.0,
-                          bubble_color='grey',
-                          bubble_size: float = 140.0,
-                          link_color='grey',
+                          bubble_color='#c1322d',
+                          bubble_size: float = 160.0,
+                          link_color='#484f58',
                           offset_length: float = 500.0,
                           show_title: bool = True):
     """
@@ -745,43 +815,36 @@ def figure_carte_virages(sess,
             pass
         laps = laps.pick_drivers(drv_identifier)
 
-    if laps is None or laps.empty:
-        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-        fig.patch.set_facecolor('white')
-        ax.set_facecolor('white')
-        ax.text(0.5, 0.5, "Aucun tour disponible", ha='center', va='center')
-        ax.axis('off')
-        return fig
+    if laps is None or len(laps) == 0:
+        return _err_figure("Aucun tour disponible pour cette session", figsize=figsize, dpi=dpi)
 
     lap = _select_lap(laps, lap_number)
     if lap is None:
-        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-        fig.patch.set_facecolor('white')
-        ax.set_facecolor('white')
-        ax.text(0.5, 0.5, "Tour indisponible", ha='center', va='center')
-        ax.axis('off')
-        return fig
+        return _err_figure("Tour indisponible (aucun tour valide trouvé)", figsize=figsize, dpi=dpi)
 
     # Position et infos circuit
     try:
         pos = lap.get_pos_data()
     except Exception as exc:
-        logger.warning("get_pos_data a échoué: %s", exc)
-        pos = None
+        logger.exception("get_pos_data a échoué")
+        return _err_figure(f"Données de position indisponibles : {type(exc).__name__}: {exc}", figsize=figsize, dpi=dpi)
+
     try:
         circuit_info = sess.get_circuit_info()
-    except Exception:
+    except Exception as exc:
+        logger.warning("get_circuit_info a échoué: %s", exc)
         circuit_info = None
 
-    # Créer la figure
-    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    fig.patch.set_facecolor('white')
-    ax.set_facecolor('white')
+    if pos is None or len(pos) == 0:
+        return _err_figure("Données de position vides", figsize=figsize, dpi=dpi)
 
-    if pos is None or pos.empty:
-        ax.text(0.5, 0.5, "Données de position indisponibles", ha='center', va='center')
-        ax.axis('off')
-        return fig
+    if not all(c in pos.columns for c in ("X", "Y")):
+        return _err_figure("Colonnes X/Y manquantes dans les données de position", figsize=figsize, dpi=dpi)
+
+    # Créer la figure (thème sombre)
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    fig.patch.set_facecolor('#0d1117')
+    ax.set_facecolor('#0d1117')
 
     track = pos.loc[:, ('X', 'Y')].to_numpy()
 
@@ -818,9 +881,10 @@ def figure_carte_virages(sess,
                 track_x, track_y = _rotate([float(corner['X']), float(corner['Y'])], angle=track_angle)
 
                 # Bulle + lien
-                ax.scatter(text_x, text_y, color=bubble_color, s=bubble_size)
-                ax.plot([track_x, text_x], [track_y, text_y], color=link_color)
-                ax.text(text_x, text_y, txt, va='center_baseline', ha='center', size='small', color='white')
+                ax.scatter(text_x, text_y, color=bubble_color, s=bubble_size, zorder=3)
+                ax.plot([track_x, text_x], [track_y, text_y], color=link_color, linewidth=1, zorder=2)
+                ax.text(text_x, text_y, txt, va='center_baseline', ha='center',
+                        size='small', color='#ffffff', fontweight='bold', zorder=4)
             except Exception:
                 continue
 
@@ -830,12 +894,14 @@ def figure_carte_virages(sess,
             title_txt = sess.event['Location'] if isinstance(sess.event, dict) else getattr(sess.event, 'Location', None)
             if not title_txt:
                 title_txt = getattr(sess.event, 'name', '')
-            plt.title(title_txt)
+            plt.title(title_txt, color="#e6edf3", fontsize=16, fontweight=500, pad=12)
         except Exception:
             pass
-    plt.xticks([])
-    plt.yticks([])
-    plt.axis('equal')
-    plt.tight_layout()
+
+    # Limites avant axis('off')
+    ax.set_xlim(rotated_track[:, 0].min(), rotated_track[:, 0].max())
+    ax.set_ylim(rotated_track[:, 1].min(), rotated_track[:, 1].max())
+    ax.set_aspect('equal')
+    ax.axis('off')
     return fig
 

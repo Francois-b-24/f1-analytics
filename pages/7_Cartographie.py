@@ -23,18 +23,22 @@ with st.sidebar:
     pilote = selecteur_pilote_unique(pilotes)
 
 
+if not pilote:
+    st.warning("Sélectionne un pilote dans la barre latérale pour afficher les cartes.")
+    st.stop()
+
 colored_header("Carte du circuit", description=None, color_name="blue-70")
-# Carte simple (tour le plus rapide de la session)
-fig = figure_carte_virages(sess)
-st.pyplot(fig)
+# Carte basée sur le tour le plus rapide du pilote sélectionné
+fig = figure_carte_virages(sess, pilote=pilote)
+st.pyplot(fig, use_container_width=True)
 
 colored_header("Vitesse sur le tour le plus rapide", description=None, color_name="blue-70")
 fig = figure_carte_vitesse(sess, pilote=pilote)
-st.pyplot(fig)
+st.pyplot(fig, use_container_width=True)
 
 colored_header("Changements de rapport sur le tour le plus rapide", description=None, color_name="blue-70")
 fig = figure_carte_rapports(sess, pilote=pilote)
-st.pyplot(fig)
+st.pyplot(fig, use_container_width=True)
 
 # Tour 10 de LEC avec traits plus fins
 #fig = figure_carte_rapports(sess, pilote="LEC", lap_number=10, linewidth_track=12, linewidth_gears=3)
