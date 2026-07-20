@@ -28,7 +28,6 @@ jobs:
 
       - name: Lint (ruff)
         run: ruff check --output-format=github .
-        continue-on-error: true  # Le repo n'est pas encore lint-clean — bloquant à activer plus tard
 
       - name: Run tests
         env:

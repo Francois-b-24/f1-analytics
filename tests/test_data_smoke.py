@@ -3,7 +3,6 @@
 Distingue les erreurs réseau/données (acceptables — `xfail`) des erreurs de
 contrat ou de signature (vrais bugs — `fail`).
 """
-import os
 import socket
 import pytest
 

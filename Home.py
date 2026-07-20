@@ -78,9 +78,12 @@ colored_header("Overview", description=None, color_name="blue-70")
 # KPIs
 c1, c2, c3 = st.columns(3)
 total_laps = int(tours['LapNumber'].max()) if not tours.empty else 0
-with c1: st.metric("Nombre de tours", f"{total_laps}")
-with c2: st.metric("Nombre de pilotes au départ", f"{len(pilotes)}")
-with c3: st.metric("Grand-Prix", nom_gp)
+with c1:
+    st.metric("Nombre de tours", f"{total_laps}")
+with c2:
+    st.metric("Nombre de pilotes au départ", f"{len(pilotes)}")
+with c3:
+    st.metric("Grand-Prix", nom_gp)
 
 add_vertical_space(1)
 # Meilleur tour de la session
@@ -89,9 +92,12 @@ if 'LapTime' in tours and tours['LapTime'].notna().any():
     best_idx = tours['LapTime'].idxmin()
     best_row = tours.loc[best_idx]
     bcol1, bcol2, bcol3 = st.columns(3)
-    with bcol1: st.metric("Pilote", str(best_row.get('Driver', '')))
-    with bcol2: st.metric("Tour", int(best_row.get('LapNumber', 0)))
-    with bcol3: st.metric("Temps", formatage_timedelta(best_row.get('LapTime')))
+    with bcol1:
+        st.metric("Pilote", str(best_row.get('Driver', '')))
+    with bcol2:
+        st.metric("Tour", int(best_row.get('LapNumber', 0)))
+    with bcol3:
+        st.metric("Temps", formatage_timedelta(best_row.get('LapTime')))
 else:
     st.info("Meilleur tour indisponible.")
 

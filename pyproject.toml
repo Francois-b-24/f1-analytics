@@ -13,6 +13,15 @@ dependencies = [
     "numpy>=2.0.2",
 ]
 
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint.per-file-ignores]
+# Streamlit impose que st.set_page_config() soit la première commande st.*
+# exécutée : certains imports doivent donc suivre l'appel de configuration.
+"Home.py" = ["E402"]
+"pages/*.py" = ["E402"]
+
 [tool.pytest.ini_options]
 # Ajoute la racine du repo au sys.path pour que `from src...` fonctionne
 # depuis tests/ sans dépendre du cwd.

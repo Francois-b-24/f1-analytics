@@ -5,7 +5,6 @@ import logging
 import pandas as pd
 import streamlit as st
 import fastf1
-from fastf1.core import DataNotLoadedError
 from .utils import secs, formatage_timedelta
 import matplotlib.pyplot as plt
 import fastf1.plotting

@@ -1,4 +1,3 @@
-import pytest
 import numpy as np
 import pandas as pd
 from src.utils import formatage_timedelta, secs
