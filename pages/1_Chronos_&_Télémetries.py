@@ -66,7 +66,7 @@ if not _tel_dispo:
     st.info(
         "⏳ Télémétrie indisponible pour cette session. "
         "Les données sont publiées par l'API F1 avec un délai de 24–48 h après la course. "
-        "Sélectionne une session 2025 ou antérieure pour accéder à la télémétrie."
+        "Réessaie plus tard, ou sélectionne une session plus ancienne."
     )
 elif pilote_1 not in _tel_dispo:
     st.warning(f"Télémétrie non disponible pour {pilote_1} sur cette session.")

@@ -31,7 +31,7 @@ if not tel_par_pilote:
     st.info(
         "⏳ Télémétrie indisponible pour cette session. "
         "Les données sont publiées avec un délai de 24–48 h après la course. "
-        "Sélectionne une session 2025 ou antérieure."
+        "Réessaie plus tard, ou sélectionne une session plus ancienne."
     )
     st.stop()
 

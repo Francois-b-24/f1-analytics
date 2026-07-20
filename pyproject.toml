@@ -2,10 +2,10 @@
 name = "formula1"
 version = "0.1.0"
 description = "Statistiques interactives sur la Formule 1."
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "streamlit",
-    "fastf1",
+    "fastf1>=3.8.3",
     "pandas",
     "matplotlib",
     "plotly",

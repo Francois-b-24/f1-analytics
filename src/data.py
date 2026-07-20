@@ -196,8 +196,8 @@ def _extract_best_lap_tel(sess, driver_codes: list[str]) -> dict[str, pd.DataFra
     la session est encore en mémoire avec ses attributs _car_data/_pos_data.
 
     Retourne un dict {code_pilote: DataFrame} avec les colonnes
-    Distance, Speed, X, Y, nGear — tout en DataFrames pandas purs,
-    sérialisables proprement par Streamlit cache_data.
+    Distance, Speed, nGear, Brake, Throttle, RPM, DRS, X, Y — tout en
+    DataFrames pandas purs, sérialisables proprement par Streamlit cache_data.
 
     On extrait ici, lors du chargement initial, pour ne plus jamais dépendre
     de lap.session plus tard (qui peut pointer vers une instance dégradée).
@@ -209,7 +209,7 @@ def _extract_best_lap_tel(sess, driver_codes: list[str]) -> dict[str, pd.DataFra
             lap = _select_lap(laps, lap_number=None)
             if lap is None:
                 continue
-            # car_data : Speed, RPM, nGear, Brake, Throttle
+            # car_data : Speed, RPM, nGear, Brake, Throttle, DRS
             car = lap.get_car_data().add_distance()
             # pos_data : X, Y, Z
             pos = lap.get_pos_data()
@@ -217,7 +217,10 @@ def _extract_best_lap_tel(sess, driver_codes: list[str]) -> dict[str, pd.DataFra
             car = car.reset_index(drop=True)
             pos = pos.reset_index(drop=True)
             # Garde les colonnes utiles et merge sur la distance/ordre
-            cols_car = [c for c in ("Distance", "Speed", "nGear", "Brake", "Throttle") if c in car.columns]
+            cols_car = [
+                c for c in ("Distance", "Speed", "nGear", "Brake", "Throttle", "RPM", "DRS")
+                if c in car.columns
+            ]
             cols_pos = [c for c in ("X", "Y") if c in pos.columns]
             # Normalise les longueurs (car et pos peuvent différer légèrement)
             n = min(len(car), len(pos))
@@ -232,7 +235,7 @@ def _extract_best_lap_tel(sess, driver_codes: list[str]) -> dict[str, pd.DataFra
 
 
 @st.cache_data(show_spinner="Chargement de la session F1…", max_entries=4, ttl=3600)
-def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 3):
+def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 4):
     """Charge tous les DataFrames sérialisables.
 
     _build_session extrait la télémétrie AVANT que cache_data ne touche
@@ -639,9 +642,20 @@ def figure_positions_par_tour(sess, pilotes=None):
             figsize=(10, 5),
         )
 
-    # Axes et légendes
-    ax.set_ylim([20.5, 0.5])
-    ax.set_yticks([1, 5, 10, 15, 20])
+    # Axes et légendes — bornes dérivées de la grille réelle (22 voitures en 2026,
+    # 20 auparavant) plutôt que codées en dur.
+    try:
+        nb_positions = int(laps["Position"].max())
+    except (ValueError, TypeError):
+        nb_positions = 0
+    if nb_positions < 1:
+        nb_positions = max(len(pilotes), 20)
+
+    ax.set_ylim([nb_positions + 0.5, 0.5])
+    ticks = [1] + list(range(5, nb_positions + 1, 5))
+    if ticks[-1] != nb_positions:
+        ticks.append(nb_positions)
+    ax.set_yticks(ticks)
     ax.set_xlabel("Tour")
     ax.set_ylabel("Position")
     leg = ax.legend(
