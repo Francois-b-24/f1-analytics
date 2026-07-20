@@ -236,6 +236,9 @@ def _get_or_reload_session(annee: int, course: str, sess_type: str):
     sess = st.session_state.get(key)
     if sess is None:
         sess, _, _ = _build_session(annee, course, sess_type)
+        # Même politique qu'ailleurs : une seule Session vivante à la fois.
+        for ancienne in [k for k in st.session_state if k.startswith("_f1_sess_") and k != key]:
+            del st.session_state[ancienne]
         st.session_state[key] = sess
         return sess
     try:
@@ -290,8 +293,13 @@ def _extract_best_lap_tel(sess, driver_codes: list[str]) -> dict[str, pd.DataFra
     return result
 
 
-@st.cache_data(show_spinner="Chargement de la session F1…", max_entries=4, ttl=3600)
-def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 4):
+# max_entries=1 : une session chargée occupe ~600 Mo en mémoire (mesuré sur une
+# course 2026 complète, télémétrie comprise). L'hébergement Streamlit Cloud
+# plafonne à ~1 Go, donc deux sessions simultanées suffisent à faire tuer le
+# processus — il redémarre alors en laissant une session à moitié chargée, d'où
+# les DataNotLoadedError observés en production.
+@st.cache_data(show_spinner="Chargement de la session F1…", max_entries=1, ttl=1800)
+def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 5):
     """Charge tous les DataFrames sérialisables.
 
     _build_session extrait la télémétrie AVANT que cache_data ne touche
@@ -331,7 +339,12 @@ def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 4)
         logger.info("Résultats officiels indisponibles: %s", exc)
         results = pd.DataFrame()
 
+    # Une seule Session vivante conservée à la fois : chacune pèse ~500 Mo et
+    # elles s'accumuleraient à chaque changement de Grand Prix, jusqu'à épuiser
+    # la mémoire de l'hébergement.
     key = f"_f1_sess_{annee}_{course}_{sess_type}"
+    for ancienne in [k for k in st.session_state if k.startswith("_f1_sess_") and k != key]:
+        del st.session_state[ancienne]
     st.session_state[key] = sess
 
     logger.info("Session chargée: %d tours, %d pilotes, %d avec télémétrie",

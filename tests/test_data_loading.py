@@ -156,6 +156,27 @@ def test_build_session_tours_vides(monkeypatch, sans_extraction):
         data_module._build_session(2026, "Belgian Grand Prix", "R")
 
 
+def test_une_seule_session_vivante_conservee(monkeypatch, sans_extraction):
+    """Les Sessions précédentes sont libérées à chaque changement de GP.
+
+    Chacune pèse ~500 Mo : les accumuler épuise la mémoire de l'hébergement,
+    ce qui faisait tuer puis redémarrer le processus en production.
+    """
+    import streamlit as st
+
+    st.session_state["_f1_sess_2024_Australian Grand Prix_R"] = object()
+    st.session_state["_f1_sess_2025_Monaco Grand Prix_Q"] = object()
+    st.session_state["autre_cle"] = "à préserver"
+
+    monkeypatch.setattr(data_module.fastf1, "get_session", lambda *a, **k: _SessionOK())
+    data_module._get_or_reload_session(2026, "Belgian Grand Prix", "R")
+
+    cles = [k for k in st.session_state if k.startswith("_f1_sess_")]
+    assert cles == ["_f1_sess_2026_Belgian Grand Prix_R"]
+    # Les clés hors sessions ne sont pas touchées
+    assert st.session_state["autre_cle"] == "à préserver"
+
+
 def test_build_session_nominal(monkeypatch, sans_extraction):
     """Cas nominal : un seul appel à load(), les pilotes sont extraits."""
     sess = _SessionOK()
