@@ -74,7 +74,16 @@ const isAsleep = async (page) => {
   const browser = await puppeteer.launch({
     headless: true,
     acceptInsecureCerts: true,
-    args: ['--no-sandbox'],
+    // En conteneur CI, le bac à sable et le gestionnaire de plantage de Chrome
+    // n'ont pas les permissions nécessaires : crashpad fait échouer le
+    // lancement ("--database is required"). On les désactive explicitement.
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-crash-reporter',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+    ],
   });
 
   const failures = [];
