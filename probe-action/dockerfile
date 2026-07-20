@@ -1,5 +1,10 @@
 FROM ghcr.io/puppeteer/puppeteer:25.3.0
 
+# GitHub Actions écrase HOME par /github/home dans le conteneur : Puppeteer y
+# chercherait son cache navigateur et ne trouverait pas le Chrome installé sous
+# /home/pptruser. On fige donc le chemin du cache indépendamment de HOME.
+ENV PUPPETEER_CACHE_DIR=/home/pptruser/.cache/puppeteer
+
 # Dossier de travail dans le container
 WORKDIR /home/pptruser/src
 
