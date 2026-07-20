@@ -66,6 +66,37 @@ class _SessionSansTours(_SessionOK):
         raise RuntimeError("DataNotLoadedError: data has not been loaded yet")
 
 
+class _SessionChargementSilencieux(_SessionOK):
+    """`load()` réussit sans charger les tours — le cas vu en production.
+
+    Le premier `load()` ne lève pas mais laisse `sess.laps` indisponible ;
+    seul un appel ciblé sur les tours les rend accessibles.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._tours_prets = False
+
+    def load(self, **kwargs):
+        self.appels.append(kwargs)
+        if kwargs.get("laps"):
+            self._tours_prets = True
+
+    @property
+    def laps(self):
+        if not self._tours_prets:
+            raise RuntimeError("DataNotLoadedError: data has not been loaded yet")
+        return _laps_valides()
+
+
+class _SessionToursVides(_SessionOK):
+    """Les tours se chargent mais sont vides (session sans données publiées)."""
+
+    @property
+    def laps(self):
+        return _FakeLaps({"Driver": [], "LapNumber": [], "LapTime": []})
+
+
 @pytest.fixture
 def sans_extraction(monkeypatch):
     """Neutralise l'extraction télémétrie, hors sujet pour ces tests."""
@@ -90,6 +121,35 @@ def test_build_session_tours_indisponibles(monkeypatch, sans_extraction):
     """Un accès aux tours impossible donne une erreur explicite, pas brute."""
     monkeypatch.setattr(
         data_module.fastf1, "get_session", lambda *a, **k: _SessionSansTours()
+    )
+
+    with pytest.raises(RuntimeError, match="Données de tours indisponibles"):
+        data_module._build_session(2026, "Belgian Grand Prix", "R")
+
+
+def test_build_session_chargement_silencieux(monkeypatch, sans_extraction):
+    """Régression production : load() réussit mais ne charge pas les tours.
+
+    Aucune exception n'est levée, donc le repli sur exception ne suffisait pas ;
+    il faut vérifier explicitement la présence des tours et relancer un
+    chargement ciblé.
+    """
+    sess = _SessionChargementSilencieux()
+    monkeypatch.setattr(data_module.fastf1, "get_session", lambda *a, **k: sess)
+
+    retour, _, _ = data_module._build_session(2026, "Belgian Grand Prix", "R")
+
+    assert retour is sess
+    # Premier appel complet, puis un appel ciblé sur les tours
+    assert sess.appels[0] == {}
+    assert sess.appels[-1]["laps"] is True
+    assert not sess.laps.empty
+
+
+def test_build_session_tours_vides(monkeypatch, sans_extraction):
+    """Des tours vides donnent une erreur explicite, pas un tableau muet."""
+    monkeypatch.setattr(
+        data_module.fastf1, "get_session", lambda *a, **k: _SessionToursVides()
     )
 
     with pytest.raises(RuntimeError, match="Données de tours indisponibles"):

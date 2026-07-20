@@ -130,6 +130,20 @@ def _ensure_session_loaded(sess) -> None:
     sess.load()
 
 
+def _laps_ou_none(sess):
+    """Retourne `sess.laps`, ou None si les tours ne sont pas chargés.
+
+    `Session.laps` lève `DataNotLoadedError` tant que `load()` n'a pas peuplé
+    les tours — y compris lorsque `load()` s'est terminé sans erreur. Cette
+    fonction transforme ce cas en valeur testable plutôt qu'en exception.
+    """
+    try:
+        return sess.laps
+    except Exception as exc:
+        logger.debug("Accès à sess.laps impossible: %s", type(exc).__name__)
+        return None
+
+
 def _build_session(annee: int, course: str, sess_type: str):
     """Crée, charge et retourne une session FastF1 fraîche + la télémétrie
     extraite IMMÉDIATEMENT, avant tout passage par le cache Streamlit.
@@ -143,10 +157,13 @@ def _build_session(annee: int, course: str, sess_type: str):
     logger.info("Chargement session %s / %s / %s", annee, course, sess_type)
     sess = fastf1.get_session(annee, course, sess_type)
 
-    # `load()` peut ne charger que partiellement selon ce que l'API publie.
-    # On tente d'abord un chargement complet ; si la télémétrie n'est pas
-    # disponible, on retombe sur un chargement sans télémétrie plutôt que de
-    # laisser l'accès à `sess.laps` lever un DataNotLoadedError plus loin.
+    # `load()` peut échouer de deux façons distinctes :
+    #  - en levant une exception (réseau, session absente) ;
+    #  - en retournant SANS erreur mais sans avoir chargé les tours, auquel cas
+    #    `sess.laps` lève DataNotLoadedError plus loin. C'est ce second cas,
+    #    silencieux, qui cassait le chargement en production.
+    # On tente donc un chargement complet, puis on vérifie explicitement que
+    # les tours sont bien là, avec un repli sans télémétrie si besoin.
     try:
         sess.load()
     except Exception as exc:
@@ -154,18 +171,35 @@ def _build_session(annee: int, course: str, sess_type: str):
             "load() complet a échoué (%s: %s) — nouvel essai sans télémétrie",
             type(exc).__name__, exc,
         )
-        sess.load(telemetry=False, weather=False, messages=False)
+        try:
+            sess.load(telemetry=False, weather=False, messages=False)
+        except Exception as exc2:
+            raise RuntimeError(
+                f"Chargement impossible pour {annee} {course} {sess_type} "
+                f"({type(exc2).__name__}). La session n'est peut-être pas "
+                "encore publiée par l'API F1."
+            ) from exc2
 
-    # `sess.laps` lève DataNotLoadedError si les tours n'ont pas été chargés :
-    # on le convertit en erreur explicite, lisible côté interface.
-    try:
-        laps = sess.laps
-    except Exception as exc:
+    laps = _laps_ou_none(sess)
+    if laps is None:
+        # load() n'a pas levé mais les tours manquent : on retente en ciblant
+        # explicitement les tours, sans les données annexes.
+        logger.warning("Tours absents après load() — nouvel essai ciblé")
+        try:
+            sess.load(laps=True, telemetry=False, weather=False, messages=False)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Données de tours indisponibles pour {annee} {course} "
+                f"{sess_type} ({type(exc).__name__})."
+            ) from exc
+        laps = _laps_ou_none(sess)
+
+    if laps is None or laps.empty:
         raise RuntimeError(
-            f"Données de tours indisponibles pour {annee} {course} {sess_type} "
-            f"({type(exc).__name__}). La session n'est peut-être pas encore "
-            "publiée par l'API F1."
-        ) from exc
+            f"Données de tours indisponibles pour {annee} {course} {sess_type}. "
+            "La session n'est peut-être pas encore publiée par l'API F1 "
+            "(les données paraissent 24–48 h après la course)."
+        )
 
     # Extraction immédiate pendant que _car_data/_pos_data sont en mémoire
     driver_codes = sorted(laps['Driver'].dropna().unique().tolist())
