@@ -1,9 +1,14 @@
 FROM ghcr.io/puppeteer/puppeteer:25.3.0
 
-# GitHub Actions écrase HOME par /github/home dans le conteneur : Puppeteer y
-# chercherait son cache navigateur et ne trouverait pas le Chrome installé sous
-# /home/pptruser. On fige donc le chemin du cache indépendamment de HOME.
-ENV PUPPETEER_CACHE_DIR=/home/pptruser/.cache/puppeteer
+# GitHub Actions écrase HOME par /github/home, un répertoire que pptruser ne
+# peut pas écrire. Deux conséquences : Puppeteer y cherche son cache navigateur
+# (et ne trouve pas le Chrome installé sous /home/pptruser), et Chrome ne peut
+# créer ni son profil ni la base de crashpad — d'où l'échec au lancement
+# « chrome_crashpad_handler: --database is required ».
+# On fige donc le cache et on redirige les chemins XDG vers /tmp, inscriptible.
+ENV PUPPETEER_CACHE_DIR=/home/pptruser/.cache/puppeteer \
+    XDG_CONFIG_HOME=/tmp/.chromium \
+    XDG_CACHE_HOME=/tmp/.chromium
 
 # Dossier de travail dans le container
 WORKDIR /home/pptruser/src

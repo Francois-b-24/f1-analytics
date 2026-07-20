@@ -83,6 +83,8 @@ const isAsleep = async (page) => {
       '--disable-crash-reporter',
       '--disable-dev-shm-usage',
       '--disable-gpu',
+      // Profil dans /tmp : HOME n'est pas inscriptible sous GitHub Actions.
+      '--user-data-dir=/tmp/.chromium-profile',
     ],
   });
 
