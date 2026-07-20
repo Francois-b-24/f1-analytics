@@ -142,10 +142,33 @@ def _build_session(annee: int, course: str, sess_type: str):
     """
     logger.info("Chargement session %s / %s / %s", annee, course, sess_type)
     sess = fastf1.get_session(annee, course, sess_type)
-    sess.load()
+
+    # `load()` peut ne charger que partiellement selon ce que l'API publie.
+    # On tente d'abord un chargement complet ; si la télémétrie n'est pas
+    # disponible, on retombe sur un chargement sans télémétrie plutôt que de
+    # laisser l'accès à `sess.laps` lever un DataNotLoadedError plus loin.
+    try:
+        sess.load()
+    except Exception as exc:
+        logger.warning(
+            "load() complet a échoué (%s: %s) — nouvel essai sans télémétrie",
+            type(exc).__name__, exc,
+        )
+        sess.load(telemetry=False, weather=False, messages=False)
+
+    # `sess.laps` lève DataNotLoadedError si les tours n'ont pas été chargés :
+    # on le convertit en erreur explicite, lisible côté interface.
+    try:
+        laps = sess.laps
+    except Exception as exc:
+        raise RuntimeError(
+            f"Données de tours indisponibles pour {annee} {course} {sess_type} "
+            f"({type(exc).__name__}). La session n'est peut-être pas encore "
+            "publiée par l'API F1."
+        ) from exc
 
     # Extraction immédiate pendant que _car_data/_pos_data sont en mémoire
-    driver_codes = sorted(sess.laps['Driver'].dropna().unique().tolist())
+    driver_codes = sorted(laps['Driver'].dropna().unique().tolist())
     tel_par_pilote = _extract_best_lap_tel(sess, driver_codes)
     logger.info("Télémétrie extraite pour %d/%d pilotes", len(tel_par_pilote), len(driver_codes))
 
@@ -243,7 +266,15 @@ def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 4)
     """
     sess, tel_par_pilote, best_laps = _build_session(annee, course, sess_type)
 
-    tours = sess.laps.copy().reset_index(drop=True)
+    # _build_session a déjà validé l'accès aux tours ; on reste défensif ici
+    # car la session peut avoir été rechargée entre-temps.
+    try:
+        tours = sess.laps.copy().reset_index(drop=True)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Données de tours indisponibles pour {annee} {course} {sess_type} "
+            f"({type(exc).__name__})."
+        ) from exc
     if 'LapTime' in tours:
         tours['LapSeconds'] = tours['LapTime'].apply(secs)
     for col in ['Sector1Time', 'Sector2Time', 'Sector3Time']:

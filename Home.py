@@ -69,7 +69,8 @@ except Exception as e:
             chargement_session.clear()
             st.rerun()
     with st.expander("Détails techniques"):
-        st.code(f"{err_type}: {msg}")
+        import traceback
+        st.code(f"{err_type}: {msg}\n\n{traceback.format_exc()}")
     st.stop()
 
 
