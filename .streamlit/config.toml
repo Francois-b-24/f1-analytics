@@ -1,6 +1,9 @@
 [server]
 headless = true
-enableCORS = false
+# CORS et XSRF sont laissés activés (valeur par défaut des deux options).
+# Ne pas remettre enableCORS = false : combiné à enableXsrfProtection = true,
+# Streamlit réactive silencieusement les deux, donc la ligne n'aurait aucun
+# effet tout en laissant croire que CORS est désactivé.
 enableXsrfProtection = true
 maxUploadSize = 50
 maxMessageSize = 200
