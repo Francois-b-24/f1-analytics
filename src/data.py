@@ -130,20 +130,26 @@ def _ensure_session_loaded(sess) -> None:
     sess.load()
 
 
-def _api_f1_joignable(timeout: float = 5.0) -> bool:
-    """Teste l'accès sortant à l'API Live Timing de la F1.
+def _api_f1_joignable(timeout: float = 8.0) -> bool:
+    """Teste que l'API Live Timing répond réellement à une requête HTTP.
 
-    Sert uniquement à qualifier une panne : sans accès réseau, aucune session
-    ne peut être chargée, et le message d'erreur doit le dire plutôt que de
-    laisser croire que la session n'est pas encore publiée.
+    Une simple ouverture de socket ne suffit pas : l'hôte peut accepter la
+    connexion TCP tout en refusant ou filtrant les requêtes applicatives. On
+    interroge donc un fichier statique connu et on vérifie le code de réponse.
     """
-    import socket
+    import urllib.error
+    import urllib.request
 
+    url = (
+        "https://livetiming.formula1.com/static/2024/"
+        "2024-03-24_Australian_Grand_Prix/2024-03-24_Race/SessionInfo.json"
+    )
+    requete = urllib.request.Request(url, headers={"User-Agent": "f1-analytics"})
     try:
-        with socket.create_connection(("livetiming.formula1.com", 443), timeout=timeout):
-            return True
-    except OSError as exc:
-        logger.warning("API F1 injoignable: %s", exc)
+        with urllib.request.urlopen(requete, timeout=timeout) as reponse:
+            return 200 <= reponse.status < 300
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        logger.warning("API F1 injoignable en HTTP: %s", exc)
         return False
 
 
