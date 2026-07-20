@@ -12,6 +12,7 @@ from src.analytics import (
 )
 from src.config import configure_page
 from src.data import chargement_session
+from src.theme import ACCENT_BLUE, ACCENT_GOLD, ACCENT_RED, FREINAGE, TRACTION
 from src.ui import selections_courantes
 
 configure_page("F1 Analytics – Énergie & 2026", page_icon="⚡")
@@ -158,18 +159,18 @@ if {"Distance", "Speed"}.issubset(tel.columns):
             y=tel["Speed"],
             mode="lines",
             name=f"Vitesse {pilote}",
-            line=dict(color="#58a6ff", width=2),
+            line=dict(color=ACCENT_BLUE, width=2),
         )
     )
     fig.add_hline(
         y=DEPLOY_TAPER_START_KMH,
-        line=dict(color="#c9a961", dash="dash", width=1.5),
+        line=dict(color=ACCENT_GOLD, dash="dash", width=1.5),
         annotation_text=f"Début de décroissance ({DEPLOY_TAPER_START_KMH:.0f} km/h)",
         annotation_position="top left",
     )
     fig.add_hline(
         y=DEPLOY_TAPER_END_KMH,
-        line=dict(color="#c1322d", dash="dot", width=1.5),
+        line=dict(color=ACCENT_RED, dash="dot", width=1.5),
         annotation_text=f"Déploiement nul ({DEPLOY_TAPER_END_KMH:.0f} km/h)",
         annotation_position="top left",
     )
@@ -215,7 +216,7 @@ else:
             "VitesseEntree": ":.0f",
             "VitesseSortie": ":.0f",
         },
-        color_discrete_map={"Freinage": "#c1322d", "Traction": "#3fb950"},
+        color_discrete_map={"Freinage": FREINAGE, "Traction": TRACTION},
         labels={"Longueur": "Distance (m)", "Phase": ""},
     )
     fig_ph.update_layout(height=260, xaxis_title="Distance sur le tour (m)")
@@ -266,8 +267,8 @@ else:
             barmode="group",
             labels={"value": "Part du tour", "variable": "Phase"},
             color_discrete_map={
-                "part_freinage": "#c1322d",
-                "part_traction": "#3fb950",
+                "part_freinage": FREINAGE,
+                "part_traction": TRACTION,
             },
         )
         fig_cmp.update_layout(height=400, yaxis_tickformat=".0%")

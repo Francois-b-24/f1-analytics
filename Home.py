@@ -3,6 +3,7 @@ from src.config import configure_page_home
 from src.ui import selecteurs_session, sidebar_hint_once
 from src.data import chargement_session
 from src.utils import formatage_timedelta
+from src.theme import COMPOSES, ORDRE_COMPOSES
 import plotly.express as px
 import pandas as pd
 from streamlit_extras.colored_header import colored_header
@@ -124,7 +125,16 @@ if 'Compound' in tours:
     comp = (tours.dropna(subset=['Compound'])
                 .groupby(['Driver','Compound']).size()
                 .reset_index(name='Tours'))
-    fig = px.bar(comp, x='Driver', y='Tours', color='Compound', barmode='stack')
+    # Ordre et couleurs fixes : un composé garde la même teinte d'une session
+    # à l'autre, même si certains composés sont absents.
+    presents = [c for c in ORDRE_COMPOSES if c in set(comp['Compound'])]
+    autres = sorted(set(comp['Compound']) - set(ORDRE_COMPOSES))
+    fig = px.bar(
+        comp, x='Driver', y='Tours', color='Compound', barmode='stack',
+        category_orders={'Compound': presents + autres},
+        color_discrete_map=COMPOSES,
+        labels={'Tours': 'Tours', 'Driver': 'Pilote', 'Compound': 'Composé'},
+    )
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Pas d'information pneus disponible.")
