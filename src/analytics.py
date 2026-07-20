@@ -6,10 +6,12 @@ Regroupe les features :
 - Dégradation de stint (F2)
 - Delta time overlay entre deux pilotes (F3)
 - Heatmap de dégradation pneus (F4)
+- Proxys d'énergie 2026 (F5)
 
-Toutes les fonctions consomment le DataFrame `tours` renvoyé par
-`scr.data.chargement_session` (déjà enrichi de colonnes LapSeconds et
-Sector[1-3]TimeSec).
+Les fonctions F1-F4 consomment le DataFrame `tours` renvoyé par
+`src.data.chargement_session` (déjà enrichi de colonnes LapSeconds et
+Sector[1-3]TimeSec). Les fonctions F5 consomment les DataFrames de
+télémétrie de `tel_par_pilote` (Distance, Speed, Throttle, Brake).
 """
 from __future__ import annotations
 
@@ -284,3 +286,204 @@ def tyre_degradation_matrix(
         .sort_index()
     )
     return mat
+
+
+# ---------------------------------------------------------------------------
+# F5 — Proxys d'énergie 2026
+# ---------------------------------------------------------------------------
+# AVERTISSEMENT IMPORTANT
+# La F1 ne publie AUCUNE donnée d'énergie : état de charge ERS, taux de
+# déploiement/récupération MGU-K, mode d'aéro active. Confirmé par le mainteneur
+# de FastF1 (discussion #861) : « F1 has decided to not make any data on active
+# aero and ERS state available publicly ».
+#
+# Les fonctions ci-dessous ne mesurent donc rien : elles DÉRIVENT des indicateurs
+# de comportement à partir des seuls canaux réellement publiés (Speed, Throttle,
+# Brake). Ce sont des estimations sans vérité terrain, à présenter comme telles.
+#
+# Le canal DRS est volontairement ignoré : vérifié sur les données réelles, il ne
+# contient que des 0 en 2026 comme en 2024, donc inexploitable.
+# ---------------------------------------------------------------------------
+
+# Seuils réglementaires 2026 : le déploiement MGU-K décroît à partir de 290 km/h
+# et s'annule à 355 km/h.
+DEPLOY_TAPER_START_KMH = 290.0
+DEPLOY_TAPER_END_KMH = 355.0
+
+
+def _segments_from_mask(mask: pd.Series) -> list[tuple[int, int]]:
+    """Retourne les segments contigus [(i_debut, i_fin_inclus), ...] où mask est vrai.
+
+    Utilitaire interne partagé par les détections de phases (freinage, traction).
+    """
+    if mask is None or len(mask) == 0:
+        return []
+    values = mask.fillna(False).to_numpy(dtype=bool)
+    if not values.any():
+        return []
+
+    segments: list[tuple[int, int]] = []
+    start: int | None = None
+    for i, active in enumerate(values):
+        if active and start is None:
+            start = i
+        elif not active and start is not None:
+            segments.append((start, i - 1))
+            start = None
+    if start is not None:
+        segments.append((start, len(values) - 1))
+    return segments
+
+
+def phases_telemetrie(
+    tel: pd.DataFrame,
+    seuil_throttle: float = 90.0,
+    distance_min_m: float = 20.0,
+) -> pd.DataFrame:
+    """Découpe un tour en phases de freinage et de pleine traction.
+
+    Proxy des fenêtres de récupération (freinage) et de déploiement (traction).
+    Ce n'est PAS une mesure d'énergie — voir l'avertissement du module.
+
+    Paramètres
+    ----------
+    tel : DataFrame
+        Télémétrie d'un tour, colonnes Distance, Speed, Throttle, Brake.
+    seuil_throttle : float
+        Seuil (%) au-delà duquel on considère la traction comme pleine.
+    distance_min_m : float
+        Longueur minimale d'un segment pour être retenu (filtre le bruit).
+
+    Retour
+    ------
+    DataFrame : Phase ("Freinage"/"Traction"), DistanceDebut, DistanceFin,
+    Longueur (m), VitesseEntree, VitesseSortie.
+    """
+    cols = {"Distance", "Speed"}
+    if tel is None or tel.empty or not cols.issubset(tel.columns):
+        return pd.DataFrame(
+            columns=["Phase", "DistanceDebut", "DistanceFin", "Longueur",
+                     "VitesseEntree", "VitesseSortie"]
+        )
+
+    df = tel.sort_values("Distance").reset_index(drop=True)
+
+    masques: dict[str, pd.Series] = {}
+    if "Brake" in df.columns:
+        masques["Freinage"] = df["Brake"].astype(bool)
+    if "Throttle" in df.columns:
+        masques["Traction"] = df["Throttle"] >= seuil_throttle
+
+    rows = []
+    for phase, mask in masques.items():
+        for i0, i1 in _segments_from_mask(mask):
+            d0 = float(df["Distance"].iloc[i0])
+            d1 = float(df["Distance"].iloc[i1])
+            longueur = d1 - d0
+            if longueur < distance_min_m:
+                continue
+            rows.append({
+                "Phase": phase,
+                "DistanceDebut": d0,
+                "DistanceFin": d1,
+                "Longueur": longueur,
+                "VitesseEntree": float(df["Speed"].iloc[i0]),
+                "VitesseSortie": float(df["Speed"].iloc[i1]),
+            })
+
+    if not rows:
+        return pd.DataFrame(
+            columns=["Phase", "DistanceDebut", "DistanceFin", "Longueur",
+                     "VitesseEntree", "VitesseSortie"]
+        )
+    return pd.DataFrame(rows).sort_values("DistanceDebut").reset_index(drop=True)
+
+
+def resume_proxys_energie(tel: pd.DataFrame, seuil_throttle: float = 90.0) -> dict:
+    """Agrège des indicateurs de comportement énergétique sur un tour.
+
+    Toutes les valeurs sont des ESTIMATIONS dérivées de Speed/Throttle/Brake.
+
+    Retour
+    ------
+    dict : longueur du tour, part et distance de freinage (proxy récupération),
+    part et distance de pleine traction (proxy déploiement), distance passée
+    au-delà du seuil de décroissance MGU-K (290 km/h), vitesse maximale,
+    nombre de zones de freinage.
+    """
+    vide = {
+        "distance_tour": 0.0,
+        "part_freinage": 0.0, "distance_freinage": 0.0, "nb_freinages": 0,
+        "part_traction": 0.0, "distance_traction": 0.0,
+        "distance_au_dela_taper": 0.0, "part_au_dela_taper": 0.0,
+        "vitesse_max": 0.0,
+    }
+    if tel is None or tel.empty or "Distance" not in tel.columns or "Speed" not in tel.columns:
+        return vide
+
+    df = tel.sort_values("Distance").reset_index(drop=True)
+    d = df["Distance"].to_numpy(dtype=float)
+    if len(d) < 2:
+        return vide
+
+    # Longueur représentée par chaque échantillon (différentielle avant).
+    pas = np.diff(d, append=d[-1])
+    pas = np.clip(pas, 0.0, None)
+    total = float(pas.sum())
+    if total <= 0:
+        return vide
+
+    res = dict(vide)
+    res["distance_tour"] = total
+    res["vitesse_max"] = float(df["Speed"].max())
+
+    if "Brake" in df.columns:
+        m = df["Brake"].fillna(False).to_numpy(dtype=bool)
+        dist = float(pas[m].sum())
+        res["distance_freinage"] = dist
+        res["part_freinage"] = dist / total
+        res["nb_freinages"] = len(_segments_from_mask(df["Brake"].astype(bool)))
+
+    if "Throttle" in df.columns:
+        m = (df["Throttle"] >= seuil_throttle).fillna(False).to_numpy(dtype=bool)
+        dist = float(pas[m].sum())
+        res["distance_traction"] = dist
+        res["part_traction"] = dist / total
+
+    m = (df["Speed"] >= DEPLOY_TAPER_START_KMH).fillna(False).to_numpy(dtype=bool)
+    dist = float(pas[m].sum())
+    res["distance_au_dela_taper"] = dist
+    res["part_au_dela_taper"] = dist / total
+
+    return res
+
+
+def comparaison_proxys_energie(
+    tel_par_pilote: dict[str, pd.DataFrame],
+    pilotes: list[str] | None = None,
+    seuil_throttle: float = 90.0,
+) -> pd.DataFrame:
+    """Applique `resume_proxys_energie` à plusieurs pilotes.
+
+    Retour
+    ------
+    DataFrame trié par part de traction décroissante, une ligne par pilote.
+    Vide si aucune télémétrie exploitable.
+    """
+    if not tel_par_pilote:
+        return pd.DataFrame()
+
+    codes = pilotes if pilotes else sorted(tel_par_pilote.keys())
+    rows = []
+    for code in codes:
+        tel = tel_par_pilote.get(code)
+        if tel is None or getattr(tel, "empty", True):
+            continue
+        resume = resume_proxys_energie(tel, seuil_throttle=seuil_throttle)
+        if resume["distance_tour"] <= 0:
+            continue
+        rows.append({"Pilote": code, **resume})
+
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows).sort_values("part_traction", ascending=False).reset_index(drop=True)

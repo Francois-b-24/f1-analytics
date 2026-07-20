@@ -9,6 +9,9 @@ from src.analytics import (
     stint_degradation_fits,
     delta_time_vs_distance,
     tyre_degradation_matrix,
+    phases_telemetrie,
+    resume_proxys_energie,
+    comparaison_proxys_energie,
 )
 
 
@@ -87,3 +90,75 @@ def test_empty_input_handling():
     assert stint_degradation_fits(pd.DataFrame()).empty
     assert tyre_degradation_matrix(empty).empty
     assert delta_time_vs_distance(None, None).empty
+
+
+# ---------------------------------------------------------------------------
+# F5 — Proxys d'énergie 2026
+# ---------------------------------------------------------------------------
+@pytest.fixture
+def fake_tel():
+    """Tour synthétique : traction 0-1000 m, freinage 1000-1500 m, traction 1500-2000 m.
+
+    Pas d'échantillonnage constant de 10 m pour rendre les parts calculables à la main.
+    """
+    distance = np.arange(0, 2000, 10, dtype=float)
+    throttle = np.where((distance < 1000) | (distance >= 1500), 100.0, 0.0)
+    brake = (distance >= 1000) & (distance < 1500)
+    # Vitesse : élevée en traction, chute au freinage
+    speed = np.where(brake, 150.0, 300.0)
+    return pd.DataFrame(
+        {"Distance": distance, "Speed": speed, "Throttle": throttle, "Brake": brake}
+    )
+
+
+def test_phases_telemetrie(fake_tel):
+    phases = phases_telemetrie(fake_tel)
+    assert not phases.empty
+    assert set(phases["Phase"].unique()) == {"Traction", "Freinage"}
+    # 2 phases de traction (avant et après le freinage) + 1 freinage
+    assert (phases["Phase"] == "Traction").sum() == 2
+    assert (phases["Phase"] == "Freinage").sum() == 1
+    # Les segments sont ordonnés par distance croissante
+    assert phases["DistanceDebut"].is_monotonic_increasing
+    # Le freinage commence bien vers 1000 m
+    freinage = phases[phases["Phase"] == "Freinage"].iloc[0]
+    assert freinage["DistanceDebut"] == pytest.approx(1000.0, abs=20)
+
+
+def test_phases_telemetrie_filtre_segments_courts(fake_tel):
+    # Avec un seuil supérieur à la longueur du freinage (500 m), il disparaît
+    phases = phases_telemetrie(fake_tel, distance_min_m=600.0)
+    assert (phases["Phase"] == "Freinage").sum() == 0
+
+
+def test_resume_proxys_energie(fake_tel):
+    r = resume_proxys_energie(fake_tel)
+    # 500 m de freinage sur 2000 m de tour => 25 %
+    assert r["part_freinage"] == pytest.approx(0.25, abs=0.02)
+    # 1500 m de pleine traction => 75 %
+    assert r["part_traction"] == pytest.approx(0.75, abs=0.02)
+    assert r["nb_freinages"] == 1
+    assert r["vitesse_max"] == 300.0
+    # 300 km/h dépasse le seuil de décroissance (290) : toute la traction compte
+    assert r["part_au_dela_taper"] == pytest.approx(0.75, abs=0.02)
+    # Les parts restent des fractions
+    for cle in ("part_freinage", "part_traction", "part_au_dela_taper"):
+        assert 0.0 <= r[cle] <= 1.0
+
+
+def test_comparaison_proxys_energie(fake_tel):
+    lent = fake_tel.copy()
+    lent["Throttle"] = 0.0  # aucune pleine traction
+    df = comparaison_proxys_energie({"AAA": fake_tel, "BBB": lent})
+    assert list(df["Pilote"]) == ["AAA", "BBB"]  # tri par part_traction décroissante
+    assert df.loc[df["Pilote"] == "BBB", "part_traction"].iloc[0] == 0.0
+
+
+def test_proxys_energie_entrees_vides():
+    assert phases_telemetrie(pd.DataFrame()).empty
+    assert phases_telemetrie(None).empty
+    assert resume_proxys_energie(pd.DataFrame())["distance_tour"] == 0.0
+    assert resume_proxys_energie(None)["distance_tour"] == 0.0
+    assert comparaison_proxys_energie({}).empty
+    # Un pilote sans télémétrie exploitable est ignoré, pas une erreur
+    assert comparaison_proxys_energie({"XXX": pd.DataFrame()}).empty
