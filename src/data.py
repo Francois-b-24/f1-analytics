@@ -130,6 +130,23 @@ def _ensure_session_loaded(sess) -> None:
     sess.load()
 
 
+def _api_f1_joignable(timeout: float = 5.0) -> bool:
+    """Teste l'accès sortant à l'API Live Timing de la F1.
+
+    Sert uniquement à qualifier une panne : sans accès réseau, aucune session
+    ne peut être chargée, et le message d'erreur doit le dire plutôt que de
+    laisser croire que la session n'est pas encore publiée.
+    """
+    import socket
+
+    try:
+        with socket.create_connection(("livetiming.formula1.com", 443), timeout=timeout):
+            return True
+    except OSError as exc:
+        logger.warning("API F1 injoignable: %s", exc)
+        return False
+
+
 def _laps_ou_none(sess):
     """Retourne `sess.laps`, ou None si les tours ne sont pas chargés.
 
@@ -181,6 +198,7 @@ def _build_session(annee: int, course: str, sess_type: str):
             ) from exc2
 
     laps = _laps_ou_none(sess)
+    cause: Exception | None = None
     if laps is None:
         # load() n'a pas levé mais les tours manquent : on retente en ciblant
         # explicitement les tours, sans les données annexes.
@@ -188,18 +206,26 @@ def _build_session(annee: int, course: str, sess_type: str):
         try:
             sess.load(laps=True, telemetry=False, weather=False, messages=False)
         except Exception as exc:
-            raise RuntimeError(
-                f"Données de tours indisponibles pour {annee} {course} "
-                f"{sess_type} ({type(exc).__name__})."
-            ) from exc
-        laps = _laps_ou_none(sess)
+            cause = exc
+            logger.warning("Chargement ciblé des tours échoué: %s", exc)
+        else:
+            laps = _laps_ou_none(sess)
 
     if laps is None or laps.empty:
+        # Distingue une panne d'accès à l'API (réseau bloqué, service HS) d'une
+        # session réellement non publiée : le message doit orienter vers la
+        # bonne cause plutôt que d'accuser systématiquement la publication.
+        if not _api_f1_joignable():
+            raise RuntimeError(
+                "L'API F1 est injoignable depuis le serveur : impossible de "
+                "récupérer les données. Vérifie la connectivité sortante de "
+                "l'hébergement, puis réessaie."
+            ) from cause
         raise RuntimeError(
             f"Données de tours indisponibles pour {annee} {course} {sess_type}. "
             "La session n'est peut-être pas encore publiée par l'API F1 "
             "(les données paraissent 24–48 h après la course)."
-        )
+        ) from cause
 
     # Extraction immédiate pendant que _car_data/_pos_data sont en mémoire
     driver_codes = sorted(laps['Driver'].dropna().unique().tolist())
