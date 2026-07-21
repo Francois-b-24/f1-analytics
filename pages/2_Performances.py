@@ -16,9 +16,8 @@ if not loaded:
     st.stop()
 
 data = chargement_session(annee, grand_prix, session_type)
-sess = data["session"]
 
-fig = figure_positions_par_tour(sess)          # tous les pilotes
-# ou : fig = figure_positions_par_tour(sess, pilotes=["VER","HAM","LEC"])
+fig = figure_positions_par_tour(data["tours"])          # tous les pilotes
+# ou : figure_positions_par_tour(data["tours"], pilotes=["VER","HAM","LEC"])
 
 st.pyplot(fig)

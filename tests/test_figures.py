@@ -1,6 +1,6 @@
 """Tests de non-régression sur les figures matplotlib.
 
-100 % offline : les sessions FastF1 sont remplacées par des doublures minimales.
+100 % offline : les figures consomment des DataFrames, pas de session FastF1.
 Couvre notamment la grille à 22 voitures introduite en 2026, qui cassait
 l'ancien `set_ylim([20.5, 0.5])` codé en dur.
 """
@@ -11,19 +11,6 @@ import pytest
 matplotlib.use("Agg")  # backend sans affichage, obligatoire en CI
 
 from src.data import figure_positions_par_tour  # noqa: E402
-
-
-class _FakeSession:
-    """Doublure minimale de `fastf1.core.Session` pour les figures.
-
-    Ne fournit que ce que `figure_positions_par_tour` consomme : `laps`,
-    `results` et `drivers`.
-    """
-
-    def __init__(self, laps: pd.DataFrame, results: pd.DataFrame | None = None):
-        self.laps = laps
-        self.results = results if results is not None else pd.DataFrame()
-        self.drivers = sorted(laps["Driver"].dropna().unique().tolist())
 
 
 def _fake_laps(nb_pilotes: int, nb_tours: int = 10) -> pd.DataFrame:
@@ -43,8 +30,7 @@ def _fake_laps(nb_pilotes: int, nb_tours: int = 10) -> pd.DataFrame:
 @pytest.mark.parametrize("nb_pilotes", [20, 22])
 def test_positions_axe_suit_la_grille(nb_pilotes):
     """L'axe des positions doit s'adapter à la taille réelle de la grille."""
-    sess = _FakeSession(_fake_laps(nb_pilotes))
-    fig = figure_positions_par_tour(sess)
+    fig = figure_positions_par_tour(_fake_laps(nb_pilotes))
     ax = fig.axes[0]
 
     bas, haut = ax.get_ylim()
@@ -61,8 +47,7 @@ def test_positions_axe_suit_la_grille(nb_pilotes):
 
 def test_positions_grille_2026_inclut_toutes_les_voitures():
     """Régression 2026 : avec 22 voitures, aucune ne doit sortir du cadre."""
-    sess = _FakeSession(_fake_laps(22))
-    fig = figure_positions_par_tour(sess)
+    fig = figure_positions_par_tour(_fake_laps(22))
     ax = fig.axes[0]
 
     bas, _ = ax.get_ylim()
@@ -74,8 +59,7 @@ def test_positions_grille_2026_inclut_toutes_les_voitures():
 
 def test_positions_session_vide_renvoie_une_figure():
     """Une session sans tours ne doit pas lever, mais rendre une figure d'erreur."""
-    sess = _FakeSession(pd.DataFrame(columns=["Driver", "LapNumber", "Position"]))
-    fig = figure_positions_par_tour(sess)
+    fig = figure_positions_par_tour(pd.DataFrame(columns=["Driver", "LapNumber", "Position"]))
     assert fig is not None
     assert len(fig.axes) >= 1
     matplotlib.pyplot.close(fig)

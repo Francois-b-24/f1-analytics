@@ -25,7 +25,6 @@ if not loaded:
 
 # 2) Charger les données une seule fois (cache côté src.data)
 data = chargement_session(annee, grand_prix, session_type)
-sess = data["session"]
 tours = data["tours"]
 pilotes = data["pilotes"]
 

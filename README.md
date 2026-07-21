@@ -2,7 +2,7 @@
 
 **Production** : [https://f1-fastanalytics.streamlit.app](https://f1-fastanalytics.streamlit.app)
 
-Application **Streamlit** basée sur **[FastF1](https://docs.fastf1.dev/)** pour explorer interactivement les données d'un week-end de Grand Prix : chronos, télémétrie, pneus & stratégies, météo, arrêts aux stands, classements, cartographie circuit, secteurs.
+Application **Streamlit** basée sur **[OpenF1](https://openf1.org)** pour explorer interactivement les données d'un week-end de Grand Prix : chronos, télémétrie, pneus & stratégies, météo, arrêts aux stands, classements, cartographie circuit, secteurs.
 
 ---
 
@@ -13,12 +13,52 @@ Application **Streamlit** basée sur **[FastF1](https://docs.fastf1.dev/)** pour
 - **Météo** — température air/piste, vent, humidité au fil de la session
 - **Classements** — pilotes & constructeurs cumulés jusqu'à un Grand Prix donné (via Ergast)
 - **Pitstops** — durée et timing des arrêts aux stands
-- **Cartographie circuit** — carte de vitesse, rapports engagés, numérotation des virages
+- **Cartographie circuit** — tracé coloré par la vitesse et par le rapport engagé
 - **Secteurs** — décomposition par secteurs (S1/S2/S3)
 - **Énergie & 2026** — indicateurs de comportement énergétique dérivés de la télémétrie, replacés dans la réglementation 2026 (voir la note ci-dessous)
 - **Export CSV** des données chargées
 
-> **Saison 2026** — l'app suit la nouvelle réglementation : grille à 22 voitures et 11 écuries (Audi, Cadillac), palette d'équipes à jour. Nécessite FastF1 ≥ 3.8.3.
+> **Saison 2026** — l'app suit la nouvelle réglementation : grille à 22 voitures et 11 écuries (Audi, Cadillac).
+>
+> **Couverture : 2023 → aujourd'hui.** OpenF1 ne publie pas de données antérieures à 2023.
+
+---
+
+## 📡 Source de données : pourquoi OpenF1
+
+L'application utilisait **FastF1**, qui interroge l'API Live Timing officielle
+(`livetiming.formula1.com`). Cette API est **inaccessible depuis Streamlit
+Cloud** : les IP de datacenter sont refusées. Symptôme en production — aucune
+session ne se chargeait, y compris des courses de 2024 publiées depuis deux ans.
+Le miroir officiel de FastF1 (`livetiming-mirror.fastf1.dev`) répond 404.
+
+Les données proviennent donc d'**[OpenF1](https://openf1.org)**, joignable
+depuis l'hébergement. Équivalence vérifiée sur le GP de Belgique 2026 : mêmes
+22 pilotes, mêmes composés, et un écart de **0,0 ms** sur les meilleurs tours.
+
+Bénéfices annexes mesurés :
+
+| | FastF1 | OpenF1 |
+|---|---|---|
+| Mémoire par session | ~595 Mo | **~200 Mo** |
+| Objet `Session` à maintenir | oui (source de `DataNotLoadedError`) | non |
+
+L'empreinte mémoire dépassait la limite de ~1 Go de Streamlit Cloud dès deux
+sessions en cache, ce qui faisait tuer puis redémarrer le processus.
+
+**Conséquences du changement :**
+
+- couverture limitée à **2023+** ;
+- la carte avec **numérotation des virages** disparaît (elle reposait sur
+  `get_circuit_info()` de FastF1, sans équivalent OpenF1) ; les cartes de
+  vitesse et de rapports engagés sont conservées ;
+- FastF1 reste une dépendance, uniquement pour **Ergast** (classements
+  championnat), dont l'accès n'est pas bloqué.
+
+Tous les appels réseau sont isolés dans [`src/openf1.py`](src/openf1.py) et la
+conversion vers les DataFrames de l'app dans
+[`src/adaptateurs.py`](src/adaptateurs.py) : changer de fournisseur ne demande
+de toucher qu'à ces deux fichiers.
 
 ---
 
@@ -56,7 +96,9 @@ est présenté comme une estimation, sans vérité terrain pour le valider.
 f1-analytics/
 ├─ Home.py                       # Point d'entrée Streamlit (overview + KPIs)
 ├─ src/                          # Modules internes
-│  ├─ config.py                  # Setup pages, cache FastF1, logging, Sentry
+│  ├─ config.py                  # Setup pages, logging, Sentry, thème
+│  ├─ openf1.py                  # Client HTTP OpenF1 (tous les appels réseau)
+│  ├─ adaptateurs.py             # OpenF1 -> DataFrames de l'application
 │  ├─ data.py                    # Chargement session, classements, figures
 │  ├─ ui.py                      # Sélecteurs (saison, GP, type session, pilotes)
 │  ├─ analytics.py               # Calculs (dégradation, delta, secteurs, proxys énergie)
@@ -137,21 +179,26 @@ Après un push sur `master`, Streamlit Cloud rebuild automatiquement. Suivre les
 
 ## 🔧 Variables d'environnement
 
-- `FASTF1_CACHE` — chemin du cache FastF1 (défaut : `/tmp/fastf1_cache`)
+- `FASTF1_CACHE` — chemin du cache FastF1, utilisé par Ergast (défaut : `/tmp/fastf1_cache`)
 - `LOG_LEVEL` — `INFO`, `DEBUG`, `WARNING` (défaut `INFO`)
 - `SENTRY_DSN` — DSN Sentry (optionnel ; aussi lisible via `st.secrets`)
 - `ENV` — `prod` / `staging` (envoyé à Sentry)
 
 ---
 
-## 💾 Cache FastF1
+## 💾 Caches
 
-FastF1 met en cache toutes les requêtes API (laps, télémétrie, météo) dans un dossier local. La résolution du chemin suit cet ordre :
+Les données OpenF1 sont mises en cache par Streamlit (`st.cache_data`, 30 min,
+2 sessions maximum) — un plafond volontairement bas pour rester loin de la
+limite mémoire de l'hébergement.
+
+FastF1 conserve son propre cache disque, utilisé uniquement par Ergast pour les
+classements. La résolution du chemin suit cet ordre :
 
 1. Variable d'environnement `FASTF1_CACHE` si définie
 2. `/tmp/fastf1_cache` sinon (cache éphémère, survit à la session Streamlit Cloud)
 
-Le dossier `cache/` du repo est **dans `.gitignore`** — ne pas le committer (lourd + risque de schéma incompatible avec une nouvelle version de FastF1).
+Le dossier `cache/` du repo est **dans `.gitignore`** — ne pas le committer.
 
 **Purger le cache** (en cas de schéma périmé) :
 ```bash
@@ -191,11 +238,11 @@ inaperçue.
 |---|---|---|
 | « Session indisponible » sur prod | Session non encore disputée ou résultats non publiés | Choisir une saison antérieure ou un GP terminé |
 | Crash silencieux après quelques chargements | OOM Streamlit Cloud (≈1 GB) | `max_entries=4` sur `chargement_session` borne la conso. Redémarrer l'app via le panel. |
-| Erreur au premier `load()` après update FastF1 | Schéma du cache SQLite incompatible | Purger `$FASTF1_CACHE` |
-| Calendrier vide dans le sélecteur | API FastF1 / Ergast temporairement KO | Réessayer dans quelques minutes |
+| Télémétrie partielle (quelques pilotes manquants) | Quota OpenF1 atteint (HTTP 429) | Normal : le client réessaie automatiquement. Recharger la session si besoin. |
+| Calendrier vide dans le sélecteur | OpenF1 temporairement indisponible | Réessayer dans quelques minutes |
 | `ImportError` sur sentry_sdk | Pas dans `requirements.txt` | Vérifier que la dépendance est bien listée et redéployer |
-| Boucle de redirection `HTTP 303` vers `/-/login` | Incident plateforme ou app non publique — pas une mise en veille | Vérifier la visibilité de l'app dans le panel Streamlit Cloud (Settings → Sharing) |
-| Télémétrie vide sur une course récente | Données publiées avec 24–48 h de délai | Réessayer plus tard ou choisir une session antérieure |
+| Boucle de redirection `HTTP 303` vers `/-/login` | Échange de cookie de session Streamlit — normal dans un navigateur | Aucune action ; un client HTTP sans cookies verra toujours le 303 |
+| Télémétrie vide sur une course récente | Données publiées avec quelques heures de délai | Réessayer plus tard ou choisir une session antérieure |
 
 ---
 
@@ -208,15 +255,16 @@ inaperçue.
 
 Les tests d'`analytics`, de `figures` et d'`utils` sont entièrement hors-ligne
 (fixtures synthétiques) ; seul `test_data_smoke.py` requiert le réseau et se
-marque `xfail` si l'API FastF1 est indisponible.
+marque `xfail` si OpenF1 est indisponible.
 
 ---
 
 ## 🧰 Stack
 
-- **Python 3.11** (minimum 3.10 — requis par FastF1 3.8)
+- **Python 3.11** (minimum 3.10)
 - **Streamlit 1.50** — UI
-- **FastF1 3.8.3** — données F1 (Live Timing + Ergast), support saison 2026
+- **OpenF1** — source des données de session (tours, télémétrie, météo, pneus)
+- **FastF1 3.8.3** — uniquement pour Ergast (classements championnat)
 - **Pandas 2.3 / NumPy 2.2** — manipulation
 - **Plotly 6 / Matplotlib 3.9** — visualisations
 - **Sentry SDK** — observabilité

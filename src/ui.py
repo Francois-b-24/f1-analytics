@@ -3,63 +3,58 @@ import pandas as pd
 from datetime import datetime
 from streamlit_extras.colored_header import colored_header
 
+from .openf1 import PREMIERE_SAISON
+
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def _get_event_schedule(annee: int) -> list[str]:
-    """Retourne la liste des EventName pour une saison, cachée 24 h."""
-    import fastf1
+    """Noms des Grands Prix d'une saison, dans l'ordre du calendrier.
+
+    Le cache de 24 h évite de réinterroger OpenF1 à chaque interaction : le
+    calendrier d'une saison ne bouge pas.
+    """
+    from . import openf1
     try:
-        schedule = fastf1.get_event_schedule(annee, include_testing=False)
+        return [openf1.nom_grand_prix(c) for c in openf1.courses(annee)]
     except Exception:
         return []
-    if 'EventName' not in schedule.columns:
-        return []
-    return schedule['EventName'].tolist()
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def _last_completed_event(annee: int) -> str | None:
-    """Retourne le nom du dernier Grand Prix dont la date de course est passée.
+    """Dernier Grand Prix dont la course a déjà eu lieu.
 
-    Permet d'éviter de pré-sélectionner une course future qui ferait crasher
-    `sess.load()` (résultats inexistants).
-
-    Normalise les datetimes en tz-naive UTC pour éviter le `TypeError: Invalid
-    comparison between dtype=datetime64[ns, UTC+XX:XX] and Timestamp` quand
-    FastF1 retourne des dates tz-aware (cas typique pour Session5Date).
+    Évite de pré-sélectionner une épreuve à venir, qui n'aurait aucune donnée.
+    Les dates OpenF1 sont tz-aware : la comparaison se fait en UTC.
     """
-    import fastf1
+    from . import openf1
     try:
-        schedule = fastf1.get_event_schedule(annee, include_testing=False)
+        courses = openf1.courses(annee)
     except Exception:
         return None
-    if schedule is None or schedule.empty or 'EventName' not in schedule.columns:
+    if not courses:
         return None
 
-    date_col = next((c for c in ('Session5Date', 'EventDate') if c in schedule.columns), None)
-    if date_col is None:
-        return schedule['EventName'].iloc[0]
+    maintenant = pd.Timestamp.utcnow()
+    passees = []
+    for course in courses:
+        date = pd.to_datetime(course.get("date_start"), format="ISO8601",
+                              utc=True, errors="coerce")
+        if pd.notna(date) and date < maintenant:
+            passees.append(course)
 
-    try:
-        dates = pd.to_datetime(schedule[date_col], errors='coerce', utc=True)
-        dates = dates.dt.tz_convert(None)  # tz-naive UTC
-        now = pd.Timestamp.utcnow().tz_localize(None)
-        past = schedule[dates < now]
-    except Exception:
+    if not passees:
         return None
-
-    if past.empty:
-        return None
-    return past['EventName'].iloc[-1]
+    return openf1.nom_grand_prix(passees[-1])
 
 
 def _default_year() -> int:
-    """Année par défaut : année courante si elle a au moins une course terminée,
-    sinon l'année précédente. Évite de pointer vers une saison non commencée."""
+    """Année par défaut : l'année courante si elle a une course terminée,
+    sinon la précédente — jamais avant la première saison couverte."""
     current = datetime.now().year
     if _last_completed_event(current):
         return current
-    return current - 1
+    return max(current - 1, PREMIERE_SAISON)
 
 
 def selecteurs_session():
@@ -79,7 +74,8 @@ def selecteurs_session():
     grand_prix_def = st.session_state.get("grand_prix", last_event)
     session_type_def = st.session_state.get("session_type", "R")
 
-    annees = list(range(2018, datetime.now().year + 1))[::-1]
+    # OpenF1, la source de données, ne couvre pas les saisons antérieures à 2023.
+    annees = list(range(PREMIERE_SAISON, datetime.now().year + 1))[::-1]
     annee = st.selectbox(
         "Saison", annees,
         index=annees.index(annee_def) if annee_def in annees else 0,

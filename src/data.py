@@ -1,73 +1,19 @@
 from __future__ import annotations
 
 import logging
+import time
 
 import pandas as pd
 import streamlit as st
-import fastf1
-from .utils import secs, formatage_timedelta
+from . import adaptateurs, openf1
+from .theme import CATEGORIQUE, couleur_pilote
+from .utils import formatage_timedelta
 import matplotlib.pyplot as plt
-import fastf1.plotting
 import numpy as np
 import matplotlib as mpl
 from matplotlib.collections import LineCollection
 
 logger = logging.getLogger("f1_analytics.data")
-
-
-def _select_lap(laps, lap_number: int | None):
-    """
-    Sélectionne un objet `fastf1.core.Lap` (pas une pd.Series) depuis un
-    DataFrame de tours FastF1.
-
-    Garantit que `get_telemetry()` / `get_pos_data()` sont appelables sur
-    le retour — fait un `.iloc[[0]].pick_fastest()` plutôt que `.iloc[0]`
-    qui renverrait une Series sans ces méthodes.
-
-    Retourne `None` si rien d'utilisable (le caller doit gérer ce cas).
-    """
-    if laps is None or len(laps) == 0:
-        return None
-
-    # 1. Cas tour spécifique
-    if lap_number is not None:
-        try:
-            subset = laps[laps["LapNumber"] == lap_number]
-            if subset is not None and len(subset) > 0:
-                lap = subset.pick_fastest()
-                if lap is not None and hasattr(lap, "get_telemetry"):
-                    return lap
-        except Exception as exc:
-            logger.debug("pick_fastest(subset lap_number=%s) a échoué: %s", lap_number, exc)
-
-    # 2. Tour le plus rapide global
-    try:
-        # Filtrer d'abord les tours avec un LapTime valide (sinon pick_fastest peut renvoyer NaN/Series)
-        if "LapTime" in laps.columns:
-            valid = laps[laps["LapTime"].notna()]
-            if len(valid) > 0:
-                lap = valid.pick_fastest()
-                if lap is not None and hasattr(lap, "get_telemetry"):
-                    return lap
-        lap = laps.pick_fastest()
-        if lap is not None and hasattr(lap, "get_telemetry"):
-            return lap
-    except Exception as exc:
-        logger.warning("pick_fastest(laps) a échoué: %s", exc)
-
-    # 3. Fallback : récupérer la première ligne avec LapTime non-null
-    try:
-        if "LapTime" in laps.columns:
-            valid = laps[laps["LapTime"].notna()]
-            if len(valid) > 0:
-                # `.iloc[[0]].pick_fastest()` retourne bien un Lap, pas une Series
-                lap = valid.iloc[[0]].pick_fastest()
-                if lap is not None and hasattr(lap, "get_telemetry"):
-                    return lap
-    except Exception as exc:
-        logger.warning("fallback _select_lap a échoué: %s", exc)
-
-    return None
 
 
 def _err_figure(msg: str, *, figsize=(12, 6.75), dpi=100):
@@ -105,290 +51,132 @@ def _safe_figure(fn):
 
     return wrapper
 
-def _session_telemetry_ready(sess) -> bool:
-    """Vérifie qu'une session FastF1 a bien ses données télémétrie chargées.
+def _extraire_telemetrie_openf1(session_key: int, tours: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """Récupère la télémétrie du meilleur tour de chaque pilote.
 
-    FastF1 utilise `hasattr(sess, '_car_data')` / `'_pos_data'` comme garde
-    interne pour `Session.car_data` / `Session.pos_data`. Si l'un manque,
-    `lap.get_car_data()` ou `lap.get_pos_data()` lèvent DataNotLoadedError.
-
-    On vérifie les DEUX attributs car ils sont chargés ensemble par
-    `_load_telemetry`.
+    Une requête par pilote, bornée à la fenêtre temporelle de son meilleur tour :
+    la télémétrie non filtrée pèse ~5,5 Mo par pilote (~120 Mo pour la grille),
+    contre ~90 Ko sur un seul tour.
     """
-    return hasattr(sess, "_car_data") and hasattr(sess, "_pos_data")
+    if tours.empty or "IsPersonalBest" not in tours.columns:
+        return {}
+
+    meilleurs = tours[tours["IsPersonalBest"] & tours["LapSeconds"].notna()]
+
+    def _charger(tour) -> tuple[str, pd.DataFrame] | None:
+        code = tour.get("Driver")
+        debut = tour.get("DateDebut")
+        duree = tour.get("LapSeconds")
+        numero = tour.get("DriverNumber")
+        if not code or not debut or pd.isna(duree) or pd.isna(numero):
+            return None
+        try:
+            fin = pd.to_datetime(debut, format="ISO8601", utc=True) + pd.Timedelta(seconds=float(duree))
+            car, pos = openf1.telemetrie_tour(
+                session_key, int(numero), debut, fin.isoformat()
+            )
+            tel = adaptateurs.construire_telemetrie(car, pos)
+            return (code, tel) if not tel.empty else None
+        except Exception as exc:
+            logger.warning("Télémétrie indisponible pour %s: %s: %s",
+                           code, type(exc).__name__, exc)
+            return None
+
+    # Séquentiel espacé plutôt que parallèle : mesuré sur une grille complète,
+    # 4 requêtes simultanées saturent le quota OpenF1 et ne ramènent que 17
+    # pilotes sur 22, contre 21 en séquentiel. Le gain de temps ne compense pas
+    # la perte de données, d'autant que le résultat est mis en cache 30 min.
+    resultat: dict[str, pd.DataFrame] = {}
+    for rang, (_, tour) in enumerate(meilleurs.iterrows()):
+        if rang:
+            time.sleep(openf1.DELAI_ENTRE_APPELS)
+        issue = _charger(tour)
+        if issue is not None:
+            resultat[issue[0]] = issue[1]
+    return resultat
 
 
-def _ensure_session_loaded(sess) -> None:
-    """Si la session a perdu ses attributs télémétrie, recharge en place.
+@st.cache_data(show_spinner="Chargement de la session F1…", max_entries=2, ttl=1800)
+def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 6):
+    """Charge tous les DataFrames d'une session depuis OpenF1.
 
-    `sess.load()` est idempotente et utilise le cache disque FastF1, donc
-    rapide (lecture des .ff1pkl locaux).
+    L'API Live Timing officielle est inaccessible depuis certains hébergements
+    (IP de datacenter refusées) : OpenF1 sert donc de source de données. Le
+    contrat de retour est inchangé, les pages n'ont pas à le savoir.
+
+    _v : version interne pour invalider le cache en cas de changement de schéma.
     """
-    if _session_telemetry_ready(sess):
-        return
-    logger.info("Session sans télémétrie en mémoire — rechargement en place")
-    sess.load()
-
-
-def _api_f1_joignable(timeout: float = 8.0) -> bool:
-    """Teste que l'API Live Timing répond réellement à une requête HTTP.
-
-    Une simple ouverture de socket ne suffit pas : l'hôte peut accepter la
-    connexion TCP tout en refusant ou filtrant les requêtes applicatives. On
-    interroge donc un fichier statique connu et on vérifie le code de réponse.
-    """
-    import urllib.error
-    import urllib.request
-
-    url = (
-        "https://livetiming.formula1.com/static/2024/"
-        "2024-03-24_Australian_Grand_Prix/2024-03-24_Race/SessionInfo.json"
-    )
-    requete = urllib.request.Request(url, headers={"User-Agent": "f1-analytics"})
-    try:
-        with urllib.request.urlopen(requete, timeout=timeout) as reponse:
-            return 200 <= reponse.status < 300
-    except (urllib.error.URLError, OSError, ValueError) as exc:
-        logger.warning("API F1 injoignable en HTTP: %s", exc)
-        return False
-
-
-def _laps_ou_none(sess):
-    """Retourne `sess.laps`, ou None si les tours ne sont pas chargés.
-
-    `Session.laps` lève `DataNotLoadedError` tant que `load()` n'a pas peuplé
-    les tours — y compris lorsque `load()` s'est terminé sans erreur. Cette
-    fonction transforme ce cas en valeur testable plutôt qu'en exception.
-    """
-    try:
-        return sess.laps
-    except Exception as exc:
-        logger.debug("Accès à sess.laps impossible: %s", type(exc).__name__)
-        return None
-
-
-def _build_session(annee: int, course: str, sess_type: str):
-    """Crée, charge et retourne une session FastF1 fraîche + la télémétrie
-    extraite IMMÉDIATEMENT, avant tout passage par le cache Streamlit.
-
-    Retourne (sess, tel_par_pilote, best_laps).
-    L'extraction a lieu ici car @st.cache_data pickle l'objet Session
-    dès qu'il entre dans la fonction décorée — _car_data/_pos_data sont
-    perdus à ce moment. Il faut donc extraire avant que cache_data touche
-    quoi que ce soit.
-    """
-    logger.info("Chargement session %s / %s / %s", annee, course, sess_type)
-    sess = fastf1.get_session(annee, course, sess_type)
-
-    # `load()` peut échouer de deux façons distinctes :
-    #  - en levant une exception (réseau, session absente) ;
-    #  - en retournant SANS erreur mais sans avoir chargé les tours, auquel cas
-    #    `sess.laps` lève DataNotLoadedError plus loin. C'est ce second cas,
-    #    silencieux, qui cassait le chargement en production.
-    # On tente donc un chargement complet, puis on vérifie explicitement que
-    # les tours sont bien là, avec un repli sans télémétrie si besoin.
-    try:
-        sess.load()
-    except Exception as exc:
-        logger.warning(
-            "load() complet a échoué (%s: %s) — nouvel essai sans télémétrie",
-            type(exc).__name__, exc,
+    session = openf1.trouver_session(annee, course, sess_type)
+    if session is None:
+        raise RuntimeError(
+            f"Session introuvable : {annee} – {course} ({sess_type}). "
+            "Elle n'a peut-être pas encore eu lieu, ou n'est pas publiée."
         )
-        try:
-            sess.load(telemetry=False, weather=False, messages=False)
-        except Exception as exc2:
-            raise RuntimeError(
-                f"Chargement impossible pour {annee} {course} {sess_type} "
-                f"({type(exc2).__name__}). La session n'est peut-être pas "
-                "encore publiée par l'API F1."
-            ) from exc2
 
-    laps = _laps_ou_none(sess)
-    cause: Exception | None = None
-    if laps is None:
-        # load() n'a pas levé mais les tours manquent : on retente en ciblant
-        # explicitement les tours, sans les données annexes.
-        logger.warning("Tours absents après load() — nouvel essai ciblé")
-        try:
-            sess.load(laps=True, telemetry=False, weather=False, messages=False)
-        except Exception as exc:
-            cause = exc
-            logger.warning("Chargement ciblé des tours échoué: %s", exc)
-        else:
-            laps = _laps_ou_none(sess)
+    session_key = session["session_key"]
+    logger.info("Chargement OpenF1 %s / %s / %s (session_key=%s)",
+                annee, course, sess_type, session_key)
 
-    if laps is None or laps.empty:
-        # Distingue une panne d'accès à l'API (réseau bloqué, service HS) d'une
-        # session réellement non publiée : le message doit orienter vers la
-        # bonne cause plutôt que d'accuser systématiquement la publication.
-        if not _api_f1_joignable():
-            raise RuntimeError(
-                "L'API F1 est injoignable depuis le serveur : impossible de "
-                "récupérer les données. Vérifie la connectivité sortante de "
-                "l'hébergement, puis réessaie."
-            ) from cause
+    pilotes_bruts = openf1.pilotes(session_key)
+    tours = adaptateurs.construire_tours(
+        openf1.tours(session_key),
+        pilotes_bruts,
+        openf1.relais(session_key),
+        openf1.arrets(session_key),
+    )
+    if tours.empty:
         raise RuntimeError(
-            f"Données de tours indisponibles pour {annee} {course} {sess_type}. "
-            "La session n'est peut-être pas encore publiée par l'API F1 "
-            "(les données paraissent 24–48 h après la course)."
-        ) from cause
+            f"Aucun tour disponible pour {annee} – {course} ({sess_type}). "
+            "Les données paraissent quelques heures après la session."
+        )
 
-    # Extraction immédiate pendant que _car_data/_pos_data sont en mémoire
-    driver_codes = sorted(laps['Driver'].dropna().unique().tolist())
-    tel_par_pilote = _extract_best_lap_tel(sess, driver_codes)
-    logger.info("Télémétrie extraite pour %d/%d pilotes", len(tel_par_pilote), len(driver_codes))
-
-    best_laps: dict[str, dict] = {}
-    for drv in driver_codes:
-        try:
-            laps_drv = sess.laps[sess.laps['Driver'] == drv].dropna(subset=['LapTime'])
-            if laps_drv.empty:
-                continue
-            idx = laps_drv['LapTime'].idxmin()
-            row = laps_drv.loc[idx]
-            best_laps[drv] = {
-                'LapTime': row['LapTime'],
-                'LapNumber': int(row['LapNumber']) if pd.notna(row.get('LapNumber')) else None,
-            }
-        except Exception:
-            pass
-
-    return sess, tel_par_pilote, best_laps
-
-
-def _get_or_reload_session(annee: int, course: str, sess_type: str):
-    """Renvoie un objet Session live avec télémétrie garantie chargée.
-
-    Stockage par utilisateur dans `st.session_state` (pas inter-utilisateurs
-    comme cache_resource). Si la session existe mais a perdu ses attributs
-    `_car_data` / `_pos_data` (Streamlit peut wrapper l'objet entre runs),
-    on rappelle `sess.load()` qui repeuple en mémoire depuis le cache disque.
-    """
-    key = f"_f1_sess_{annee}_{course}_{sess_type}"
-    sess = st.session_state.get(key)
-    if sess is None:
-        sess, _, _ = _build_session(annee, course, sess_type)
-        # Même politique qu'ailleurs : une seule Session vivante à la fois.
-        for ancienne in [k for k in st.session_state if k.startswith("_f1_sess_") and k != key]:
-            del st.session_state[ancienne]
-        st.session_state[key] = sess
-        return sess
+    # Positions par tour : nécessaires au graphique d'évolution (page
+    # Performances) et n'existent que pour les courses.
     try:
-        _ensure_session_loaded(sess)
+        tours = adaptateurs.ajouter_positions(tours, openf1.positions(session_key))
     except Exception as exc:
-        logger.warning("Reload en place a échoué (%s), rebuild complet", exc)
-        sess, _, _ = _build_session(annee, course, sess_type)
-        st.session_state[key] = sess
-    return sess
+        logger.info("Positions par tour indisponibles: %s", exc)
 
-
-def _extract_best_lap_tel(sess, driver_codes: list[str]) -> dict[str, pd.DataFrame]:
-    """Extrait la télémétrie du meilleur tour de chaque pilote pendant que
-    la session est encore en mémoire avec ses attributs _car_data/_pos_data.
-
-    Retourne un dict {code_pilote: DataFrame} avec les colonnes
-    Distance, Speed, nGear, Brake, Throttle, RPM, DRS, X, Y — tout en
-    DataFrames pandas purs, sérialisables proprement par Streamlit cache_data.
-
-    On extrait ici, lors du chargement initial, pour ne plus jamais dépendre
-    de lap.session plus tard (qui peut pointer vers une instance dégradée).
-    """
-    result: dict[str, pd.DataFrame] = {}
-    for drv in driver_codes:
-        try:
-            laps = sess.laps.pick_drivers(drv)
-            lap = _select_lap(laps, lap_number=None)
-            if lap is None:
-                continue
-            # car_data : Speed, RPM, nGear, Brake, Throttle, DRS
-            car = lap.get_car_data().add_distance()
-            # pos_data : X, Y, Z
-            pos = lap.get_pos_data()
-            # Merge sur Date (index temporel commun)
-            car = car.reset_index(drop=True)
-            pos = pos.reset_index(drop=True)
-            # Garde les colonnes utiles et merge sur la distance/ordre
-            cols_car = [
-                c for c in ("Distance", "Speed", "nGear", "Brake", "Throttle", "RPM", "DRS")
-                if c in car.columns
-            ]
-            cols_pos = [c for c in ("X", "Y") if c in pos.columns]
-            # Normalise les longueurs (car et pos peuvent différer légèrement)
-            n = min(len(car), len(pos))
-            merged = car[cols_car].iloc[:n].copy()
-            for c in cols_pos:
-                merged[c] = pos[c].iloc[:n].values
-            result[drv] = merged.reset_index(drop=True)
-        except Exception as exc:
-            logger.warning("Extraction télémétrie échouée pour %s: %s: %s",
-                           drv, type(exc).__name__, exc)
-    return result
-
-
-# max_entries=1 : une session chargée occupe ~600 Mo en mémoire (mesuré sur une
-# course 2026 complète, télémétrie comprise). L'hébergement Streamlit Cloud
-# plafonne à ~1 Go, donc deux sessions simultanées suffisent à faire tuer le
-# processus — il redémarre alors en laissant une session à moitié chargée, d'où
-# les DataNotLoadedError observés en production.
-@st.cache_data(show_spinner="Chargement de la session F1…", max_entries=1, ttl=1800)
-def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 5):
-    """Charge tous les DataFrames sérialisables.
-
-    _build_session extrait la télémétrie AVANT que cache_data ne touche
-    à quoi que ce soit (le pickle de cache_data vide _car_data/_pos_data).
-    _v : version interne pour invalider le cache en cas de changement de structure.
-    """
-    sess, tel_par_pilote, best_laps = _build_session(annee, course, sess_type)
-
-    # _build_session a déjà validé l'accès aux tours ; on reste défensif ici
-    # car la session peut avoir été rechargée entre-temps.
-    try:
-        tours = sess.laps.copy().reset_index(drop=True)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Données de tours indisponibles pour {annee} {course} {sess_type} "
-            f"({type(exc).__name__})."
-        ) from exc
-    if 'LapTime' in tours:
-        tours['LapSeconds'] = tours['LapTime'].apply(secs)
-    for col in ['Sector1Time', 'Sector2Time', 'Sector3Time']:
-        if col in tours:
-            tours[col + 'Sec'] = tours[col].apply(secs)
-
-    driver_codes = sorted(tours['Driver'].dropna().unique().tolist())
+    driver_codes = sorted(tours["Driver"].dropna().unique().tolist())
 
     try:
-        meteo = sess.weather_data.copy().reset_index(drop=True)
-        if 'Time' in meteo:
-            meteo['SessionTimeSec'] = meteo['Time'].apply(secs)
+        meteo = adaptateurs.construire_meteo(
+            openf1.meteo(session_key), session.get("date_start")
+        )
     except Exception as exc:
         logger.info("Données météo indisponibles: %s", exc)
         meteo = pd.DataFrame()
 
     try:
-        results = sess.results.copy().reset_index(drop=True)
+        resultats = adaptateurs.construire_resultats(
+            openf1.resultats(session_key), pilotes_bruts
+        )
     except Exception as exc:
         logger.info("Résultats officiels indisponibles: %s", exc)
-        results = pd.DataFrame()
+        resultats = pd.DataFrame()
 
-    # Une seule Session vivante conservée à la fois : chacune pèse ~500 Mo et
-    # elles s'accumuleraient à chaque changement de Grand Prix, jusqu'à épuiser
-    # la mémoire de l'hébergement.
-    key = f"_f1_sess_{annee}_{course}_{sess_type}"
-    for ancienne in [k for k in st.session_state if k.startswith("_f1_sess_") and k != key]:
-        del st.session_state[ancienne]
-    st.session_state[key] = sess
+    tel_par_pilote = _extraire_telemetrie_openf1(session_key, tours)
+
+    best_laps: dict[str, dict] = {}
+    for _, tour in tours[tours.get("IsPersonalBest", False)].iterrows():
+        code = tour.get("Driver")
+        if code:
+            best_laps[code] = {
+                "LapTime": tour.get("LapTime"),
+                "LapNumber": int(tour["LapNumber"]) if pd.notna(tour.get("LapNumber")) else None,
+            }
 
     logger.info("Session chargée: %d tours, %d pilotes, %d avec télémétrie",
                 len(tours), len(driver_codes), len(tel_par_pilote))
     return dict(
-        nom=sess.name,
+        nom=session.get("session_name") or sess_type,
         tours=tours,
         pilotes=driver_codes,
         meteo=meteo,
-        resultats=results,
+        resultats=resultats,
         tel_par_pilote=tel_par_pilote,
         best_laps=best_laps,
+        session_key=session_key,
     )
 
 
@@ -396,32 +184,35 @@ def chargement_session(annee: int, course: str, sess_type: str):
     """
     Charge une session F1 et retourne ses données.
 
-    Les DataFrames (tours, météo, résultats) sont cachés via `cache_data`
-    pour rapidité. L'objet Session live est récupéré séparément depuis
-    `st.session_state` (ou rechargé depuis le cache disque FastF1 si nécessaire)
-    pour préserver l'accès à `get_pos_data()`, `get_car_data()`, etc.
+    Les données proviennent d'OpenF1 et sont mises en cache par `cache_data`.
+    Tout est renvoyé sous forme de DataFrames : il n'y a plus d'objet Session
+    vivant à maintenir, ce qui supprime à la fois les DataNotLoadedError et
+    l'empreinte mémoire de ~600 Mo par session.
 
     Paramètres
     ----------
     annee : int
     course : str
-        Nom du Grand Prix (ex: "Australian Grand Prix").
+        Nom du Grand Prix tel qu'affiché dans le sélecteur
+        (ex: "Belgium Grand Prix", "United States Grand Prix (Austin)").
     sess_type : str
         "FP1", "FP2", "FP3", "Q", "R".
 
     Retour
     ------
     dict
-        - session : objet Session FastF1 (toujours frais)
         - nom : nom de la session
         - tours : DataFrame des tours
         - pilotes : liste des codes pilotes
         - meteo : DataFrame météo
         - resultats : DataFrame résultats officiels
+        - tel_par_pilote : {code pilote: DataFrame de télémétrie}
+        - best_laps : {code pilote: {LapTime, LapNumber}}
+        - session_key : identifiant OpenF1 de la session
+        - session : None — conservé pour compatibilité des appels existants
     """
     dfs = _chargement_dataframes(annee, course, sess_type)
-    sess = _get_or_reload_session(annee, course, sess_type)
-    return {**dfs, "session": sess}
+    return {**dfs, "session": None}
 
 
 # Expose .clear() comme avant pour Home.py (bouton "Réessayer")
@@ -463,18 +254,62 @@ def tour_rapide_tel(data: dict, code_pilote: str):
     return best, tel
 
 def _round_upto(annee: int, upto_event: str) -> int | None:
-    """Retourne le numéro de manche (1-based) correspondant à `upto_event`."""
+    """Numéro de manche (1-based) correspondant à `upto_event`.
+
+    Le calendrier vient d'OpenF1 : les libellés doivent correspondre à ceux du
+    sélecteur, et l'ancien appel à `fastf1.get_event_schedule` reposait sur
+    l'API Live Timing, inaccessible depuis l'hébergement.
+    """
     try:
-        schedule = fastf1.get_event_schedule(annee, include_testing=False)
+        courses = openf1.courses(annee)
     except Exception as exc:
-        logger.warning("get_event_schedule(%s) a échoué: %s", annee, exc)
+        logger.warning("Calendrier %s indisponible: %s", annee, exc)
         return None
-    if 'EventName' not in schedule.columns:
+
+    noms = [openf1.nom_grand_prix(c) for c in courses]
+    if upto_event not in noms:
         return None
-    names = schedule['EventName'].tolist()
-    if upto_event not in names:
-        return None
-    return names.index(upto_event) + 1
+    return noms.index(upto_event) + 1
+
+
+def _points_par_course(annee: int, nb_manches: int) -> pd.DataFrame:
+    """Points marqués course par course, jusqu'à la manche `nb_manches`.
+
+    Sert de repli quand Ergast est indisponible. Interroge OpenF1 plutôt que
+    de recharger chaque session FastF1 : l'API Live Timing est inaccessible
+    depuis l'hébergement, et un chargement complet par course serait lourd.
+
+    Retour
+    ------
+    DataFrame : BroadcastName, TeamName, Points. Vide si rien d'exploitable.
+    """
+    try:
+        courses = openf1.courses(annee)[:nb_manches]
+    except Exception as exc:
+        logger.warning("Calendrier %s indisponible: %s", annee, exc)
+        return pd.DataFrame()
+
+    morceaux = []
+    for course in courses:
+        cle = course.get("session_key")
+        if cle is None:
+            continue
+        try:
+            resultats = adaptateurs.construire_resultats(
+                openf1.resultats(cle), openf1.pilotes(cle)
+            )
+        except Exception as exc:
+            logger.debug("Résultats indisponibles (session %s): %s", cle, exc)
+            continue
+        if not resultats.empty and {"BroadcastName", "TeamName", "Points"} <= set(resultats.columns):
+            morceaux.append(resultats[["BroadcastName", "TeamName", "Points"]])
+
+    if not morceaux:
+        return pd.DataFrame()
+
+    points = pd.concat(morceaux, ignore_index=True)
+    points["Points"] = pd.to_numeric(points["Points"], errors="coerce").fillna(0)
+    return points
 
 
 def _ergast() -> "object | None":
@@ -521,31 +356,16 @@ def calcul_classement_pilote(annee: int, upto_event: str) -> pd.DataFrame:
         except Exception as exc:
             logger.warning("Ergast driver_standings a échoué, fallback session-par-session: %s", exc)
 
-    # Fallback : boucler sur chaque course, mais en chargeant SEULEMENT les résultats
-    try:
-        schedule = fastf1.get_event_schedule(annee, include_testing=False)
-    except Exception:
+    # Repli : cumuler les points course par course depuis OpenF1.
+    points = _points_par_course(annee, rnd)
+    if points.empty:
         return pd.DataFrame()
-    chunks = []
-    for i in range(rnd):
-        ev = schedule.iloc[i]
-        try:
-            s = fastf1.get_session(annee, ev['EventName'], 'R')
-            s.load(laps=False, telemetry=False, weather=False, messages=False)
-            r = s.results
-            if r is not None and not r.empty and 'BroadcastName' in r and 'Points' in r:
-                chunks.append(r[['BroadcastName', 'Points', 'TeamName']].copy())
-        except Exception as exc:
-            logger.debug("Skip %s (%s)", ev.get('EventName'), exc)
-            continue
-    if not chunks:
-        return pd.DataFrame()
-    all_pts = pd.concat(chunks, ignore_index=True)
-    classement = (all_pts.groupby(['BroadcastName', 'TeamName'], dropna=False)['Points']
+
+    classement = (points.groupby(["BroadcastName", "TeamName"], dropna=False)["Points"]
                   .sum().reset_index())
-    standings = classement.sort_values('Points', ascending=False).reset_index(drop=True)
-    standings['Position'] = standings.index + 1
-    return standings[['Position', 'BroadcastName', 'TeamName', 'Points']]
+    standings = classement.sort_values("Points", ascending=False).reset_index(drop=True)
+    standings["Position"] = standings.index + 1
+    return standings[["Position", "BroadcastName", "TeamName", "Points"]]
 
 
 @st.cache_data(ttl=3600, show_spinner="Calcul du classement constructeurs…", max_entries=8)
@@ -580,29 +400,15 @@ def calcul_classement_constructeur(annee: int, upto_event: str) -> pd.DataFrame:
         except Exception as exc:
             logger.warning("Ergast constructor_standings a échoué, fallback: %s", exc)
 
-    try:
-        schedule = fastf1.get_event_schedule(annee, include_testing=False)
-    except Exception:
+    points = _points_par_course(annee, rnd)
+    if points.empty:
         return pd.DataFrame()
-    chunks = []
-    for i in range(rnd):
-        ev = schedule.iloc[i]
-        try:
-            s = fastf1.get_session(annee, ev['EventName'], 'R')
-            s.load(laps=False, telemetry=False, weather=False, messages=False)
-            r = s.results
-            if r is not None and not r.empty and 'TeamName' in r and 'Points' in r:
-                chunks.append(r[['TeamName', 'Points']].copy())
-        except Exception:
-            continue
-    if not chunks:
-        return pd.DataFrame()
-    all_pts = pd.concat(chunks, ignore_index=True)
-    classement = (all_pts.groupby(['TeamName'], dropna=False)['Points']
+
+    classement = (points.groupby(["TeamName"], dropna=False)["Points"]
                   .sum().reset_index())
-    standings = classement.sort_values('Points', ascending=False).reset_index(drop=True)
-    standings['Position'] = standings.index + 1
-    return standings[['Position', 'TeamName', 'Points']]
+    standings = classement.sort_values("Points", ascending=False).reset_index(drop=True)
+    standings["Position"] = standings.index + 1
+    return standings[["Position", "TeamName", "Points"]]
 
 def classement_session(nb_tours: pd.DataFrame, results_df: pd.DataFrame, sess_type: str) -> pd.DataFrame:
     """
@@ -651,58 +457,47 @@ def classement_session(nb_tours: pd.DataFrame, results_df: pd.DataFrame, sess_ty
 
 
 @_safe_figure
-def figure_positions_par_tour(sess, pilotes=None):
-    """
-    Crée et renvoie une figure Matplotlib qui trace la position de chaque pilote
-    à la fin de chaque tour pour la session donnée.
+def figure_positions_par_tour(tours: pd.DataFrame, pilotes=None):
+    """Trace l'évolution de la position de chaque pilote au fil des tours.
 
     Paramètres
-    ---------
-    sess : fastf1.core.Session
-        Session FastF1 déjà chargée (via `chargement_session`).
+    ----------
+    tours : pd.DataFrame
+        DataFrame `tours` de `chargement_session`, avec les colonnes
+        Driver, LapNumber et Position.
     pilotes : list[str] | None
-        Liste optionnelle de codes pilotes (abréviations 3 lettres). Si None,
-        tous les pilotes présents dans `sess.laps` sont tracés.
+        Codes pilotes à tracer. Si None, tous ceux présents.
 
     Retour
     ------
     matplotlib.figure.Figure
     """
-    # Validation entrée
-    if sess is None or not hasattr(sess, "laps"):
-        return _err_figure("Session invalide", figsize=(10, 5))
-
-    laps = sess.laps
-    if laps is None or len(laps) == 0:
+    if tours is None or len(tours) == 0:
         return _err_figure("Aucun tour dans cette session", figsize=(10, 5))
 
-    if "Driver" not in laps.columns or "LapNumber" not in laps.columns or "Position" not in laps.columns:
+    manquantes = {"Driver", "LapNumber", "Position"} - set(tours.columns)
+    if manquantes:
         return _err_figure(
-            "Colonnes manquantes (Driver/LapNumber/Position).\n"
-            "Cette visualisation n'est disponible que pour les courses (R) avec données de classement par tour.",
+            "Colonnes manquantes : " + ", ".join(sorted(manquantes)) + ".\n"
+            "Cette visualisation n'est disponible que pour les courses (R).",
             figsize=(10, 5),
         )
 
-    # Mapping Abbreviation -> BroadcastName pour des légendes lisibles
-    name_map = {}
-    try:
-        res = getattr(sess, "results", None)
-        if res is not None and not res.empty and "Abbreviation" in res and "BroadcastName" in res:
-            name_map = dict(zip(res["Abbreviation"], res["BroadcastName"]))
-    except Exception:
-        pass
+    valides = tours.dropna(subset=["Position"])
+    if valides.empty:
+        return _err_figure(
+            "Aucune donnée de position — cette visualisation ne concerne que les courses (R).",
+            figsize=(10, 5),
+        )
 
-    # Liste de pilotes : abréviations présentes dans les laps (fiable)
     if pilotes is None:
-        pilotes = sorted(laps["Driver"].dropna().unique().tolist())
-
+        pilotes = sorted(valides["Driver"].dropna().unique().tolist())
     if not pilotes:
         return _err_figure("Aucun pilote détecté dans les tours", figsize=(10, 5))
 
-    # Figure (thème sombre)
     fig, ax = plt.subplots(figsize=(10, 5))
-    fig.patch.set_facecolor('#0d1117')
-    ax.set_facecolor('#0d1117')
+    fig.patch.set_facecolor("#0d1117")
+    ax.set_facecolor("#0d1117")
     ax.tick_params(colors="#e6edf3")
     for spine in ax.spines.values():
         spine.set_edgecolor("#30363d")
@@ -711,50 +506,31 @@ def figure_positions_par_tour(sess, pilotes=None):
     ax.title.set_color("#e6edf3")
     ax.grid(True, color="#21262d", linewidth=0.5, alpha=0.7)
 
-    # Tentative d'utiliser la palette FastF1 (couleurs équipes). Si elle échoue,
-    # fallback sur une cycle matplotlib + linestyle alterné — on ne saute PLUS
-    # silencieusement le pilote.
-    try:
-        fastf1.plotting.setup_mpl(mpl_timedelta_support=False, color_scheme='fastf1')
-    except Exception as exc:
-        logger.warning("setup_mpl FastF1 a échoué: %s", exc)
-
-    nb_tracé = 0
-    for drv in pilotes:
-        drv_laps = laps[laps["Driver"] == drv].sort_values("LapNumber")
-        if drv_laps.empty:
+    nb_trace = 0
+    for rang, code in enumerate(pilotes):
+        lignes = valides[valides["Driver"] == code].sort_values("LapNumber")
+        if lignes.empty:
             continue
+        # Palette validée du thème, et trait alterné au-delà de 8 pilotes pour
+        # que deux séries de même couleur restent distinguables.
+        ax.plot(
+            lignes["LapNumber"], lignes["Position"],
+            label=code, linewidth=1.6,
+            color=couleur_pilote(rang),
+            linestyle=["-", "--", ":"][(rang // len(CATEGORIQUE)) % 3],
+        )
+        nb_trace += 1
 
-        abb = drv_laps["Driver"].iloc[0]
-        label = name_map.get(abb, abb)
-
-        # Style FastF1 si possible, sinon défaut
-        plot_kwargs = {"label": label, "linewidth": 1.6}
-        try:
-            style = fastf1.plotting.get_driver_style(
-                identifier=abb, style=["color", "linestyle"], session=sess,
-            )
-            plot_kwargs.update(style)
-        except Exception as exc:
-            logger.debug("get_driver_style(%s) a échoué: %s", abb, exc)
-
-        try:
-            ax.plot(drv_laps["LapNumber"], drv_laps["Position"], **plot_kwargs)
-            nb_tracé += 1
-        except Exception as exc:
-            logger.warning("plot(%s) a échoué: %s", abb, exc)
-
-    if nb_tracé == 0:
+    if nb_trace == 0:
         plt.close(fig)
         return _err_figure(
             "Aucune position n'a pu être tracée — vérifie que c'est bien une course (R).",
             figsize=(10, 5),
         )
 
-    # Axes et légendes — bornes dérivées de la grille réelle (22 voitures en 2026,
-    # 20 auparavant) plutôt que codées en dur.
+    # Bornes dérivées de la grille réelle (22 voitures en 2026, 20 auparavant).
     try:
-        nb_positions = int(laps["Position"].max())
+        nb_positions = int(valides["Position"].max())
     except (ValueError, TypeError):
         nb_positions = 0
     if nb_positions < 1:
@@ -791,12 +567,9 @@ def figure_carte_vitesse(tel: pd.DataFrame,
 
     Paramètres
     ----------
-    sess : fastf1.core.Session
-        Session FastF1 déjà chargée.
-    pilote : str | int
-        Identifiant pilote (abréviation 3 lettres, numéro ou BroadcastName).
-    lap_number : int | None
-        Numéro de tour à tracer. Si None, utilise le tour le plus rapide.
+    tel : pd.DataFrame
+        Télémétrie d'un tour (colonnes X, Y et Speed), telle que fournie par
+        `chargement_session` dans `tel_par_pilote`.
     cmap : matplotlib colormap
         Colormap utilisée (par défaut plasma).
     figsize : tuple[float, float]
@@ -904,85 +677,4 @@ def figure_carte_rapports(tel: pd.DataFrame,
         cbar.outline.set_edgecolor("#30363d")
     return fig
 
-
-# --- Carte du circuit avec numérotation des virages ---
-@_safe_figure
-def figure_carte_virages(tel: pd.DataFrame,
-                          sess=None,
-                          figsize=(12, 6.75),
-                          dpi=100,
-                          track_color='#e6edf3',
-                          track_linewidth: float = 2.0,
-                          bubble_color='#c1322d',
-                          bubble_size: float = 160.0,
-                          link_color='#484f58',
-                          offset_length: float = 500.0):
-    """Trace le tracé du circuit depuis les données de position pré-extraites
-    et annote les numéros de virage.
-
-    Paramètres
-    ----------
-    tel : pd.DataFrame
-        Télémétrie pré-extraite (colonnes X, Y).
-    sess : Session FastF1 optionnelle — uniquement pour get_circuit_info().
-        Si absente ou si get_circuit_info échoue, le tracé s'affiche sans
-        numéros de virage.
-    """
-    if tel is None or len(tel) == 0:
-        return _err_figure("Données de position vides", figsize=figsize, dpi=dpi)
-    if not all(c in tel.columns for c in ("X", "Y")):
-        return _err_figure("Colonnes X/Y manquantes", figsize=figsize, dpi=dpi)
-
-    track = tel[['X', 'Y']].to_numpy(dtype=float)
-
-    # Infos circuit (virages) — optionnel, via Session
-    circuit_info = None
-    if sess is not None:
-        try:
-            circuit_info = sess.get_circuit_info()
-        except Exception as exc:
-            logger.debug("get_circuit_info a échoué: %s", exc)
-
-    # Rotation du tracé
-    track_angle = 0.0
-    if circuit_info is not None and hasattr(circuit_info, 'rotation'):
-        try:
-            track_angle = float(circuit_info.rotation) / 180.0 * np.pi
-        except Exception:
-            pass
-
-    def _rotate(xy, *, angle):
-        rot = np.array([[np.cos(angle), np.sin(angle)],
-                        [-np.sin(angle), np.cos(angle)]])
-        return np.matmul(xy, rot)
-
-    rotated = _rotate(track, angle=track_angle)
-
-    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    fig.patch.set_facecolor('#0d1117')
-    ax.set_facecolor('#0d1117')
-
-    ax.plot(rotated[:, 0], rotated[:, 1], color=track_color, linewidth=track_linewidth)
-
-    if circuit_info is not None and getattr(circuit_info, 'corners', None) is not None and not circuit_info.corners.empty:
-        offset_vec = np.array([offset_length, 0])
-        for _, corner in circuit_info.corners.iterrows():
-            try:
-                txt = f"{corner['Number']}{corner['Letter']}"
-                offset_angle = float(corner['Angle']) / 180.0 * np.pi
-                off = _rotate(offset_vec, angle=offset_angle)
-                tx, ty = _rotate([float(corner['X']) + off[0], float(corner['Y']) + off[1]], angle=track_angle)
-                px, py = _rotate([float(corner['X']), float(corner['Y'])], angle=track_angle)
-                ax.scatter(tx, ty, color=bubble_color, s=bubble_size, zorder=3)
-                ax.plot([px, tx], [py, ty], color=link_color, linewidth=1, zorder=2)
-                ax.text(tx, ty, txt, va='center_baseline', ha='center',
-                        size='small', color='#ffffff', fontweight='bold', zorder=4)
-            except Exception:
-                continue
-
-    ax.set_xlim(rotated[:, 0].min(), rotated[:, 0].max())
-    ax.set_ylim(rotated[:, 1].min(), rotated[:, 1].max())
-    ax.set_aspect('equal')
-    ax.axis('off')
-    return fig
 
