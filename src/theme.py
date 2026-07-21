@@ -1,17 +1,25 @@
 """Thème de visualisation partagé — Plotly et matplotlib.
 
-Centralise les couleurs des graphiques pour qu'ils s'accordent au thème sombre
-de l'application (`f1_theme.css`, palette carbone) au lieu d'utiliser les
-couleurs par défaut de Plotly.
+Centralise les couleurs des graphiques pour qu'ils s'accordent au thème clair
+de l'application (`f1_theme.css`) au lieu d'utiliser les couleurs par défaut
+de Plotly.
+
+Ce module est la **source de vérité des couleurs** : `src.data` importe ces
+constantes pour ses figures matplotlib plutôt que de porter ses propres valeurs.
+Changer de thème ne demande donc de toucher qu'ici, à `f1_theme.css` et à
+`.streamlit/config.toml`.
 
 Palette catégorielle
 --------------------
 Les couleurs de séries ne sont pas choisies à l'œil : la palette est validée
 (bande de luminosité, plancher de chroma, séparation pour les daltonismes
-protan/deutan, contraste ≥ 3:1 sur le fond #0d1117). Les accents de l'interface
-(`--accent-gold`, `--accent-blue`) ne conviennent PAS comme couleurs de données
-— l'or tombe sous le plancher de chroma et lit comme un gris — ils restent donc
-réservés au chrome (titres, bordures, curseurs).
+protan/deutan, contraste sur la surface #f7f8fa).
+
+Un mode clair se choisit, il ne se déduit pas d'une inversion du mode sombre :
+les teintes calibrées pour un fond sombre passent sous le seuil de contraste
+sur fond clair. Les accents d'interface (`ACCENT_GOLD`, `ACCENT_BLUE`) ne
+conviennent PAS comme couleurs de données et restent réservés au chrome
+(titres, bordures, curseurs).
 
 L'ordre des créneaux est le mécanisme de sécurité daltonisme : il ne doit pas
 être modifié, et les couleurs sont attribuées dans l'ordre, jamais en cycle.
@@ -22,30 +30,42 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 # --- Surfaces et encres (alignées sur f1_theme.css) ------------------------
-SURFACE = "#0d1117"       # --bg-base
-SURFACE_ALT = "#161b22"   # --bg-surface
-INK_PRIMARY = "#e6edf3"   # --text-primary
-INK_SECONDARY = "#9ba3af" # --text-secondary
-GRID = "#21262d"          # --border-subtle
-AXIS = "#30363d"          # --border-default
+SURFACE = "#f7f8fa"       # --bg-base : gris très clair, légèrement froid
+SURFACE_ALT = "#ffffff"   # --bg-surface : cartes et sidebar, en relief
+INK_PRIMARY = "#111418"   # --text-primary (17.4:1 sur la surface)
+INK_SECONDARY = "#5b6470" # --text-secondary (5.6:1)
+GRID = "#e4e7eb"          # --border-subtle : grille discrète
+AXIS = "#c8cdd4"          # --border-default : axes et bordures
+
+# Fond de piste des cartes du circuit (cartographie). Volontairement plus
+# sombre que les axes : c'est le décor sur lequel repose le tracé coloré, et
+# il doit contraster avec les DEUX extrémités de la colormap. Mesuré sur ce
+# gris, plasma tient à 4.2:1 côté jaune et 3.1:1 côté violet — un gris plus
+# clair rendait les hautes vitesses illisibles.
+FOND_PISTE = "#6b7280"
 
 # --- Accents de marque (chrome uniquement, pas des couleurs de séries) -----
-ACCENT_RED = "#c1322d"
-ACCENT_GOLD = "#c9a961"
-ACCENT_BLUE = "#58a6ff"
+# Le rouge de la marque passe le contraste sur fond clair (5.25:1) et est
+# conservé tel quel. L'or et le bleu du thème sombre y tombaient à 2.1 et
+# 2.4:1 : ils sont assombris pour rester lisibles.
+ACCENT_RED = "#c1322d"    # 5.25:1 — identité conservée
+ACCENT_GOLD = "#8a6d20"   # 4.61:1 (était #c9a961, illisible sur clair)
+ACCENT_BLUE = "#1f6feb"   # 4.36:1 (était #58a6ff)
 
-# --- Palette catégorielle validée pour le fond sombre ----------------------
-# Vérifiée sur #0d1117 : bande L 0.48–0.67, chroma ≥ 0.1, pire paire adjacente
-# ΔE 8.4 (protan) et 19.3 (vision normale), contraste ≥ 3:1 — tous PASS.
+# --- Palette catégorielle validée pour le fond clair -----------------------
+# Vérifiée sur #f7f8fa : bande L 0.43–0.77, chroma ≥ 0.1, pire paire adjacente
+# ΔE 9.1 (protan) et 19.6 (vision normale) — tous PASS.
+# Trois créneaux (magenta, jaune, aqua) sont sous 3:1 de contraste : admis car
+# l'encodage secondaire est toujours présent (légende nommée, étiquettes).
 CATEGORIQUE: tuple[str, ...] = (
-    "#3987e5",  # bleu
+    "#2a78d6",  # bleu
     "#008300",  # vert
-    "#d55181",  # magenta
-    "#c98500",  # jaune
-    "#199e70",  # aqua
-    "#d95926",  # orange
-    "#9085e9",  # violet
-    "#e66767",  # rouge
+    "#e87ba4",  # magenta
+    "#eda100",  # jaune
+    "#1baf7a",  # aqua
+    "#eb6834",  # orange
+    "#4a3aa7",  # violet
+    "#e34948",  # rouge
 )
 
 # --- Composés pneus --------------------------------------------------------
@@ -58,16 +78,16 @@ CATEGORIQUE: tuple[str, ...] = (
 # (il ne porte plus d'identité) et le couple jaune/rouge se confond en
 # deutéranopie. On prend donc des créneaux validés, l'étiquette du composé
 # portant le sens.
-# Validé sur #0d1117 : bande L, chroma, contraste ≥ 3:1 et plancher vision
-# normale (pire paire ΔE 15.1) tous PASS. La séparation daltonisme de la paire
-# MEDIUM/SOFT tombe dans la bande plancher (6.2), ce qui est admis car
-# l'encodage secondaire est présent : légende nommée et espace entre segments.
+# Validé sur #f7f8fa : bande L, chroma et plancher vision normale (pire paire
+# ΔE 20.8) tous PASS. La séparation daltonisme de la paire aqua/rouge tombe
+# dans la bande plancher (6.9), admis car l'encodage secondaire est présent :
+# légende nommée et espace entre segments empilés.
 COMPOSES: dict[str, str] = {
-    "HARD": "#3987e5",          # bleu
-    "MEDIUM": "#c98500",        # jaune
+    "HARD": "#2a78d6",          # bleu
+    "MEDIUM": "#eda100",        # jaune
     "SOFT": "#e34948",          # rouge
-    "INTERMEDIATE": "#199e70",  # aqua
-    "WET": "#9085e9",           # violet
+    "INTERMEDIATE": "#1baf7a",  # aqua
+    "WET": "#4a3aa7",           # violet
     "UNKNOWN": INK_SECONDARY,
 }
 
@@ -78,8 +98,10 @@ ORDRE_COMPOSES: tuple[str, ...] = (
 
 
 # --- Paires sémantiques ----------------------------------------------------
-# Freinage / traction : le rouge de la marque est conservé, associé à un vert
-# qui satisfait toutes les contraintes (ΔE 29.9 en vision normale).
+# Freinage / traction : le rouge de la marque associé à ce vert passe TOUS les
+# contrôles sans aucun WARN sur fond clair (ΔE 9.5 en deutéranopie, 29.9 en
+# vision normale, contraste ≥ 3:1). La même paire tenait sur fond sombre :
+# elle est valable dans les deux modes, donc inchangée.
 FREINAGE = ACCENT_RED
 TRACTION = "#199e70"
 
@@ -88,11 +110,11 @@ SEQUENTIELLE = "Blues"
 # Échelle divergente (polarité autour d'une référence), midpoint neutre.
 DIVERGENTE = "RdBu"
 
-_TEMPLATE_NOM = "f1_dark"
+_TEMPLATE_NOM = "f1_light"
 
 
 def _construire_template() -> go.layout.Template:
-    """Construit le template Plotly sombre de l'application."""
+    """Construit le template Plotly clair de l'application."""
     return go.layout.Template(
         layout=dict(
             paper_bgcolor=SURFACE,

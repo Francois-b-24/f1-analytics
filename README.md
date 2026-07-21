@@ -102,7 +102,7 @@ f1-analytics/
 │  ├─ data.py                    # Chargement session, classements, figures
 │  ├─ ui.py                      # Sélecteurs (saison, GP, type session, pilotes)
 │  ├─ analytics.py               # Calculs (dégradation, delta, secteurs, proxys énergie)
-│  ├─ theme.py                   # Palette validée + template Plotly sombre
+│  ├─ theme.py                   # Palette validée + template Plotly (source de vérité couleurs)
 │  └─ utils.py                   # Helpers (formatage timedelta, secs)
 ├─ pages/                        # Pages Streamlit (multi-page app)
 │  ├─ 1_Chronos_&_Télémetries.py
@@ -122,7 +122,7 @@ f1-analytics/
 ├─ requirements.txt              # Déploiement Streamlit Cloud (versions épinglées)
 ├─ runtime.txt                   # Version Python pour Streamlit Cloud
 ├─ pyproject.toml + uv.lock      # Env de dev (uv)
-└─ f1_theme.css                  # Thème CSS F1
+└─ f1_theme.css                  # Thème CSS clair (variables :root)
 ```
 
 ---

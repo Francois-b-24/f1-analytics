@@ -6,7 +6,16 @@ import time
 import pandas as pd
 import streamlit as st
 from . import adaptateurs, openf1
-from .theme import CATEGORIQUE, couleur_pilote
+from .theme import (
+    AXIS,
+    CATEGORIQUE,
+    FOND_PISTE,
+    GRID,
+    INK_PRIMARY,
+    INK_SECONDARY,
+    SURFACE,
+    couleur_pilote,
+)
 from .utils import formatage_timedelta
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,13 +28,13 @@ logger = logging.getLogger("f1_analytics.data")
 def _err_figure(msg: str, *, figsize=(12, 6.75), dpi=100):
     """Crée une figure matplotlib unique qui affiche un message d'erreur lisible.
 
-    Thème sombre cohérent avec l'app — texte clair sur fond anthracite.
+    Thème cohérent avec l'app — couleurs issues de `src.theme`.
     """
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    fig.patch.set_facecolor("#0d1117")
-    ax.set_facecolor("#0d1117")
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
     ax.text(0.5, 0.5, msg, ha="center", va="center",
-            color="#e6edf3", fontsize=12, wrap=True)
+            color=INK_PRIMARY, fontsize=12, wrap=True)
     ax.axis("off")
     return fig
 
@@ -496,15 +505,15 @@ def figure_positions_par_tour(tours: pd.DataFrame, pilotes=None):
         return _err_figure("Aucun pilote détecté dans les tours", figsize=(10, 5))
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    fig.patch.set_facecolor("#0d1117")
-    ax.set_facecolor("#0d1117")
-    ax.tick_params(colors="#e6edf3")
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
+    ax.tick_params(colors=INK_PRIMARY)
     for spine in ax.spines.values():
-        spine.set_edgecolor("#30363d")
-    ax.xaxis.label.set_color("#e6edf3")
-    ax.yaxis.label.set_color("#e6edf3")
-    ax.title.set_color("#e6edf3")
-    ax.grid(True, color="#21262d", linewidth=0.5, alpha=0.7)
+        spine.set_edgecolor(AXIS)
+    ax.xaxis.label.set_color(INK_PRIMARY)
+    ax.yaxis.label.set_color(INK_PRIMARY)
+    ax.title.set_color(INK_PRIMARY)
+    ax.grid(True, color=GRID, linewidth=0.5, alpha=0.7)
 
     nb_trace = 0
     for rang, code in enumerate(pilotes):
@@ -543,12 +552,14 @@ def figure_positions_par_tour(tours: pd.DataFrame, pilotes=None):
     ax.set_yticks(ticks)
     ax.set_xlabel("Tour")
     ax.set_ylabel("Position")
+    # La légende porte du texte secondaire : la couleur de la série reste sur
+    # le trait, l'étiquette garde une encre neutre.
     leg = ax.legend(
         bbox_to_anchor=(1.02, 1.0), loc="upper left", title="Pilotes",
-        fontsize=8, frameon=False, labelcolor="#e6edf3",
+        fontsize=8, frameon=False, labelcolor=INK_SECONDARY,
     )
     if leg is not None:
-        leg.get_title().set_color("#e6edf3")
+        leg.get_title().set_color(INK_PRIMARY)
     plt.tight_layout()
 
     return fig
@@ -600,11 +611,11 @@ def figure_carte_vitesse(tel: pd.DataFrame,
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
 
     fig, ax = plt.subplots(sharex=True, sharey=True, figsize=figsize, dpi=dpi)
-    fig.patch.set_facecolor('#0d1117')
-    ax.set_facecolor('#0d1117')
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
     ax.axis('off')
 
-    ax.plot(x, y, color='#30363d', linewidth=linewidth_track, zorder=0)
+    ax.plot(x, y, color=FOND_PISTE, linewidth=linewidth_track, zorder=0)
     norm = plt.Normalize(speed.min(), speed.max())
     lc = LineCollection(segments, cmap=cmap, norm=norm, linewidth=linewidth_speed)
     lc.set_array(speed)
@@ -618,9 +629,9 @@ def figure_carte_vitesse(tel: pd.DataFrame,
         cb = mpl.colorbar.ColorbarBase(cbaxes,
                                        norm=mpl.colors.Normalize(speed.min(), speed.max()),
                                        cmap=cmap, orientation="horizontal")
-        cb.set_label("Vitesse (km/h)", color="#e6edf3")
-        cb.ax.tick_params(colors="#e6edf3")
-        cb.outline.set_edgecolor("#30363d")
+        cb.set_label("Vitesse (km/h)", color=INK_PRIMARY)
+        cb.ax.tick_params(colors=INK_PRIMARY)
+        cb.outline.set_edgecolor(AXIS)
     return fig
 
 
@@ -656,10 +667,10 @@ def figure_carte_rapports(tel: pd.DataFrame,
     segments = np.concatenate([points[:-1], points[1:]], axis=1)
 
     fig, ax = plt.subplots(sharex=True, sharey=True, figsize=figsize, dpi=dpi)
-    fig.patch.set_facecolor('#0d1117')
-    ax.set_facecolor('#0d1117')
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
 
-    ax.plot(x, y, color='#30363d', linewidth=linewidth_track, zorder=0)
+    ax.plot(x, y, color=FOND_PISTE, linewidth=linewidth_track, zorder=0)
     lc = LineCollection(segments, norm=plt.Normalize(1, cmap.N + 1), cmap=cmap, linewidth=linewidth_gears)
     lc.set_array(gear)
     ax.add_collection(lc)
@@ -672,9 +683,9 @@ def figure_carte_rapports(tel: pd.DataFrame,
         cbar = plt.colorbar(mappable=lc, ax=ax, boundaries=np.arange(1, 10), fraction=0.046, pad=0.04)
         cbar.set_ticks(np.arange(1.5, 9.5))
         cbar.set_ticklabels(np.arange(1, 9))
-        cbar.set_label("Rapport", color="#e6edf3")
-        cbar.ax.tick_params(colors="#e6edf3")
-        cbar.outline.set_edgecolor("#30363d")
+        cbar.set_label("Rapport", color=INK_PRIMARY)
+        cbar.ax.tick_params(colors=INK_PRIMARY)
+        cbar.outline.set_edgecolor(AXIS)
     return fig
 
 

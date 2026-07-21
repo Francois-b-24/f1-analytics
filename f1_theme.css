@@ -1,39 +1,46 @@
-/* === F1 Analytics — Thème sombre sophistiqué ===
+/* === F1 Analytics — Thème clair ===
  *
- * Palette inspirée de la Formule 1 : asphalte, carbone, accent rouge
- * désaturé (terre cuite), accent doré champagne pour les highlights.
- * Mode unique sombre pour cohérence — pas de prefers-color-scheme
+ * Fond gris très clair légèrement froid, accent rouge Ferrari conservé.
+ * Mode unique clair pour cohérence — pas de prefers-color-scheme
  * (évite les conflits avec le theme Streamlit).
+ *
+ * Les contrastes indiqués sont mesurés sur --bg-base (#f7f8fa) : chaque
+ * couleur porteuse de sens atteint au moins 4.5:1 pour du texte, 3:1 pour
+ * un élément d'interface. Les valeurs du thème sombre n'ont pas été
+ * reprises telles quelles — l'or et le bleu y tombaient sous 2.5:1.
+ *
+ * Les couleurs de séries des graphiques ne sont PAS définies ici mais dans
+ * src/theme.py, qui reste la source de vérité côté Python.
  */
 
 :root {
     /* --- Fonds --- */
-    --bg-base: #0d1117;          /* fond principal — anthracite profond */
-    --bg-surface: #161b22;       /* cartes, sidebar */
-    --bg-elevated: #1c232c;      /* surface au-dessus */
-    --bg-overlay: rgba(22, 27, 34, 0.85);
+    --bg-base: #f7f8fa;          /* fond principal — gris très clair, froid */
+    --bg-surface: #ffffff;       /* cartes, sidebar — en relief sur le fond */
+    --bg-elevated: #ffffff;      /* surface au-dessus */
+    --bg-overlay: rgba(255, 255, 255, 0.85);
 
     /* --- Texte --- */
-    --text-primary: #e6edf3;     /* texte principal — blanc cassé doux */
-    --text-secondary: #9ba3af;   /* texte secondaire — gris perle */
-    --text-muted: #6b7280;
+    --text-primary: #111418;     /* texte principal (17.4:1) */
+    --text-secondary: #5b6470;   /* texte secondaire (5.6:1) */
+    --text-muted: #79808c;       /* mentions discrètes (3.7:1) */
 
     /* --- Bordures --- */
-    --border-subtle: #21262d;
-    --border-default: #30363d;
-    --border-emphasis: #484f58;
+    --border-subtle: #e4e7eb;
+    --border-default: #c8cdd4;
+    --border-emphasis: #a6adb8;
 
     /* --- Accents F1 --- */
-    --accent-red: #c1322d;       /* rouge Ferrari désaturé, sophistiqué */
-    --accent-red-soft: rgba(193, 50, 45, 0.15);
-    --accent-gold: #c9a961;      /* champagne podium */
-    --accent-gold-soft: rgba(201, 169, 97, 0.12);
-    --accent-blue: #58a6ff;      /* bleu froid pour data viz */
+    --accent-red: #c1322d;       /* rouge Ferrari — identité conservée (5.3:1) */
+    --accent-red-soft: rgba(193, 50, 45, 0.10);
+    --accent-gold: #8a6d20;      /* bronze podium (4.6:1) */
+    --accent-gold-soft: rgba(138, 109, 32, 0.10);
+    --accent-blue: #1f6feb;      /* bleu franc (4.4:1) */
 
     /* --- États --- */
-    --success: #56d364;
-    --warning: #d29922;
-    --danger: #f85149;
+    --success: #0f7b2e;          /* 5.1:1 */
+    --warning: #96690a;          /* 4.6:1 */
+    --danger: #c02a25;           /* 5.5:1 */
 }
 
 /* === Reset & globals === */
@@ -97,7 +104,9 @@ header[data-testid="stHeader"] button:hover {
 
 .f1-car-emoji {
     margin-right: 10px;
-    filter: drop-shadow(0 0 6px rgba(193, 50, 45, 0.4));
+    /* Ombre portée douce plutôt qu'une lueur diffuse : sur fond clair, un halo
+       ne se voit pas et ne fait qu'estomper les contours. */
+    filter: drop-shadow(0 1px 2px rgba(17, 20, 24, 0.20));
 }
 
 /* === Citation === */
@@ -201,7 +210,7 @@ div[data-testid="stMetric"] [data-testid="stMetricDelta"] {
     border-color: var(--accent-red);
     color: #fff;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(193, 50, 45, 0.25);
+    box-shadow: 0 2px 8px rgba(193, 50, 45, 0.30);
 }
 
 .stButton > button:active {
