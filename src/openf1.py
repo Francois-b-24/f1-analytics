@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import time
 import urllib.error
 import urllib.parse
@@ -37,12 +38,13 @@ _ATTENTE_ENTRE_TENTATIVES = 1.5
 _ATTENTE_QUOTA_DEFAUT = 5.0
 _ATTENTE_QUOTA_MAX = 20.0
 
-# Pause entre deux requêtes de télémétrie (une par pilote, soit ~44 appels).
-# Mesuré : en séquentiel espacé, 21 pilotes sur 22 obtiennent leur télémétrie
-# en ~60 s ; avec 4 requêtes parallèles, le quota sature et il n'en reste que
-# 17 pour 40 s. La complétude prime sur la vitesse, le résultat étant mis en
-# cache 30 minutes.
-DELAI_ENTRE_APPELS = 0.4
+# Nombre de requêtes menées en parallèle (télémétrie, métadonnées).
+# Mesuré sur une grille complète : le facteur limitant est le temps de réponse
+# d'OpenF1 par requête (~0,8 s sur une fenêtre d'un tour), pas le nombre de
+# requêtes. En séquentiel, une grille prend ~60-72 s ; à 3 requêtes parallèles,
+# ~35 s pour la même complétude (20-21 pilotes sur 21). Au-delà de 3, le quota
+# se déclenche (HTTP 429) et le gain s'évapore en attentes.
+REQUETES_SIMULTANEES = 3
 
 
 class OpenF1Error(RuntimeError):
@@ -104,8 +106,12 @@ def _get(endpoint: str, **params) -> list[dict]:
                     pass
                 attente = min(attente, _ATTENTE_QUOTA_MAX)
                 if tentative < _TENTATIVES:
+                    # Léger décalage aléatoire : en parallèle, plusieurs threads
+                    # peuvent recevoir 429 en même temps ; sans jitter, ils
+                    # réessaieraient simultanément et re-satureraient le quota.
+                    attente += random.uniform(0, 0.5)
                     logger.warning(
-                        "OpenF1 %s: quota atteint, attente de %.0f s", endpoint, attente
+                        "OpenF1 %s: quota atteint, attente de %.1f s", endpoint, attente
                     )
                     time.sleep(attente)
                 continue

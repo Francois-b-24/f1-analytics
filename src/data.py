@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 import streamlit as st
@@ -60,12 +60,41 @@ def _safe_figure(fn):
 
     return wrapper
 
-def _extraire_telemetrie_openf1(session_key: int, tours: pd.DataFrame) -> dict[str, pd.DataFrame]:
-    """Récupère la télémétrie du meilleur tour de chaque pilote.
+def _charger_endpoints_parallele(session_key: int, noms: list[str]) -> dict[str, list]:
+    """Charge plusieurs endpoints OpenF1 en parallèle.
 
-    Une requête par pilote, bornée à la fenêtre temporelle de son meilleur tour :
-    la télémétrie non filtrée pèse ~5,5 Mo par pilote (~120 Mo pour la grille),
-    contre ~90 Ko sur un seul tour.
+    Chaque nom correspond à une fonction de `src.openf1` prenant le session_key.
+    Un endpoint qui échoue renvoie une liste vide plutôt que d'interrompre les
+    autres : la gestion fine (tours manquants, etc.) reste à l'appelant.
+    """
+    fonctions = {
+        "pilotes": openf1.pilotes,
+        "tours": openf1.tours,
+        "relais": openf1.relais,
+        "arrets": openf1.arrets,
+        "positions": openf1.positions,
+        "meteo": openf1.meteo,
+        "resultats": openf1.resultats,
+    }
+
+    def _un(nom: str) -> tuple[str, list]:
+        try:
+            return nom, fonctions[nom](session_key)
+        except Exception as exc:
+            logger.info("Endpoint %s indisponible: %s", nom, exc)
+            return nom, []
+
+    with ThreadPoolExecutor(max_workers=openf1.REQUETES_SIMULTANEES) as executor:
+        return dict(executor.map(_un, noms))
+
+
+def _extraire_telemetrie_openf1(session_key: int, tours: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """Récupère la télémétrie du meilleur tour de chaque pilote, en parallèle.
+
+    Chaque requête est bornée à la fenêtre temporelle d'un seul tour : la
+    télémétrie non filtrée pèse ~5,5 Mo par pilote (~120 Mo pour la grille),
+    contre ~90 Ko sur un tour. Les requêtes sont menées à plusieurs threads
+    (voir `openf1.REQUETES_SIMULTANEES`).
     """
     if tours.empty or "IsPersonalBest" not in tours.columns:
         return {}
@@ -91,17 +120,18 @@ def _extraire_telemetrie_openf1(session_key: int, tours: pd.DataFrame) -> dict[s
                            code, type(exc).__name__, exc)
             return None
 
-    # Séquentiel espacé plutôt que parallèle : mesuré sur une grille complète,
-    # 4 requêtes simultanées saturent le quota OpenF1 et ne ramènent que 17
-    # pilotes sur 22, contre 21 en séquentiel. Le gain de temps ne compense pas
-    # la perte de données, d'autant que le résultat est mis en cache 30 min.
+    # Parallélisation modérée : le facteur limitant est le temps de réponse
+    # d'OpenF1 par requête (~99 % du coût est réseau), pas le nombre de requêtes.
+    # À 3 threads, le chargement complet d'une grille passe de ~72 s (séquentiel)
+    # à ~50 s, sans perte de complétude notable ; au-delà de 3, le quota
+    # (HTTP 429) se déclenche et le gain s'évapore en attentes. Le retry 429 du
+    # client, avec jitter, absorbe les saturations ponctuelles.
+    lignes = [tour for _, tour in meilleurs.iterrows()]
     resultat: dict[str, pd.DataFrame] = {}
-    for rang, (_, tour) in enumerate(meilleurs.iterrows()):
-        if rang:
-            time.sleep(openf1.DELAI_ENTRE_APPELS)
-        issue = _charger(tour)
-        if issue is not None:
-            resultat[issue[0]] = issue[1]
+    with ThreadPoolExecutor(max_workers=openf1.REQUETES_SIMULTANEES) as executor:
+        for issue in executor.map(_charger, lignes):
+            if issue is not None:
+                resultat[issue[0]] = issue[1]
     return resultat
 
 
@@ -126,12 +156,15 @@ def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 6)
     logger.info("Chargement OpenF1 %s / %s / %s (session_key=%s)",
                 annee, course, sess_type, session_key)
 
-    pilotes_bruts = openf1.pilotes(session_key)
+    # Les endpoints de session sont indépendants une fois le session_key connu :
+    # on les charge en parallèle plutôt qu'à la suite (~0,5 s chacun en série).
+    brut = _charger_endpoints_parallele(session_key, [
+        "pilotes", "tours", "relais", "arrets", "positions", "meteo", "resultats",
+    ])
+    pilotes_bruts = brut["pilotes"]
+
     tours = adaptateurs.construire_tours(
-        openf1.tours(session_key),
-        pilotes_bruts,
-        openf1.relais(session_key),
-        openf1.arrets(session_key),
+        brut["tours"], pilotes_bruts, brut["relais"], brut["arrets"],
     )
     if tours.empty:
         raise RuntimeError(
@@ -142,24 +175,20 @@ def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 6)
     # Positions par tour : nécessaires au graphique d'évolution (page
     # Performances) et n'existent que pour les courses.
     try:
-        tours = adaptateurs.ajouter_positions(tours, openf1.positions(session_key))
+        tours = adaptateurs.ajouter_positions(tours, brut["positions"])
     except Exception as exc:
         logger.info("Positions par tour indisponibles: %s", exc)
 
     driver_codes = sorted(tours["Driver"].dropna().unique().tolist())
 
     try:
-        meteo = adaptateurs.construire_meteo(
-            openf1.meteo(session_key), session.get("date_start")
-        )
+        meteo = adaptateurs.construire_meteo(brut["meteo"], session.get("date_start"))
     except Exception as exc:
         logger.info("Données météo indisponibles: %s", exc)
         meteo = pd.DataFrame()
 
     try:
-        resultats = adaptateurs.construire_resultats(
-            openf1.resultats(session_key), pilotes_bruts
-        )
+        resultats = adaptateurs.construire_resultats(brut["resultats"], pilotes_bruts)
     except Exception as exc:
         logger.info("Résultats officiels indisponibles: %s", exc)
         resultats = pd.DataFrame()

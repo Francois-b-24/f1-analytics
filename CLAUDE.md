@@ -72,10 +72,11 @@ Conséquences à connaître :
   championnat, `src/data.py`) et son cache disque. Ne pas réintroduire d'appel
   à `fastf1.get_session()` ou `get_event_schedule()` : ils passent par l'API
   bloquée.
-- **Quota OpenF1 (HTTP 429)** : le client gère le `retry-after`. La télémétrie
-  est récupérée **en séquentiel espacé**, pas en parallèle — mesuré, 4 requêtes
-  simultanées saturent le quota et ne ramènent que 17 pilotes sur 22, contre 21
-  en séquentiel.
+- **Quota OpenF1 (HTTP 429)** : le client gère le `retry-after` (avec jitter).
+  La télémétrie et les métadonnées sont récupérées à **`openf1.REQUETES_SIMULTANEES`
+  threads** (3) : le coût est réseau à ~99 %, donc c'est la parallélisation
+  bornée qui accélère, pas le regroupement de requêtes. Mesuré : 3 threads est
+  le maximum avant que le quota ne morde et n'annule le gain (~72 s → ~50 s).
 - **Filtrage temporel obligatoire** pour `car_data` : ~5,5 Mo par pilote sans
   filtre, ~90 Ko sur la fenêtre d'un tour.
 - Les libellés de Grand Prix incluent le lieu (`"United States Grand Prix (Austin)"`)
