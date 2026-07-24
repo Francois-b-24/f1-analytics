@@ -88,51 +88,50 @@ def _charger_endpoints_parallele(session_key: int, noms: list[str]) -> dict[str,
         return dict(executor.map(_un, noms))
 
 
-def _extraire_telemetrie_openf1(session_key: int, tours: pd.DataFrame) -> dict[str, pd.DataFrame]:
-    """Récupère la télémétrie du meilleur tour de chaque pilote, en parallèle.
+@st.cache_data(show_spinner=False, max_entries=64, ttl=1800)
+def _telemetrie_pilote_cache(
+    session_key: int, driver_number: int, date_debut: str, lap_seconds: float
+) -> pd.DataFrame:
+    """Télémétrie d'un pilote sur son meilleur tour — une requête, mise en cache.
 
-    Chaque requête est bornée à la fenêtre temporelle d'un seul tour : la
-    télémétrie non filtrée pèse ~5,5 Mo par pilote (~120 Mo pour la grille),
-    contre ~90 Ko sur un tour. Les requêtes sont menées à plusieurs threads
-    (voir `openf1.REQUETES_SIMULTANEES`).
+    Bornée à la fenêtre temporelle du tour : ~90 Ko, contre ~5,5 Mo pour la
+    télémétrie non filtrée d'un pilote. Cachée par (session, pilote) : une page
+    qui réaffiche le même pilote ne relance aucune requête.
+
+    Le meilleur tour d'un pilote étant figé une fois la session terminée, ses
+    paramètres constituent une clé de cache stable.
     """
-    if tours.empty or "IsPersonalBest" not in tours.columns:
-        return {}
+    fin = pd.to_datetime(date_debut, format="ISO8601", utc=True) + pd.Timedelta(seconds=lap_seconds)
+    car, pos = openf1.telemetrie_tour(session_key, driver_number, date_debut, fin.isoformat())
+    return adaptateurs.construire_telemetrie(car, pos)
 
-    meilleurs = tours[tours["IsPersonalBest"] & tours["LapSeconds"].notna()]
 
-    def _charger(tour) -> tuple[str, pd.DataFrame] | None:
-        code = tour.get("Driver")
-        debut = tour.get("DateDebut")
-        duree = tour.get("LapSeconds")
-        numero = tour.get("DriverNumber")
-        if not code or not debut or pd.isna(duree) or pd.isna(numero):
-            return None
-        try:
-            fin = pd.to_datetime(debut, format="ISO8601", utc=True) + pd.Timedelta(seconds=float(duree))
-            car, pos = openf1.telemetrie_tour(
-                session_key, int(numero), debut, fin.isoformat()
-            )
-            tel = adaptateurs.construire_telemetrie(car, pos)
-            return (code, tel) if not tel.empty else None
-        except Exception as exc:
-            logger.warning("Télémétrie indisponible pour %s: %s: %s",
-                           code, type(exc).__name__, exc)
-            return None
+def telemetrie_pilote(data: dict, code_pilote: str) -> pd.DataFrame:
+    """Télémétrie du meilleur tour d'un pilote, chargée à la demande.
 
-    # Parallélisation modérée : le facteur limitant est le temps de réponse
-    # d'OpenF1 par requête (~99 % du coût est réseau), pas le nombre de requêtes.
-    # À 3 threads, le chargement complet d'une grille passe de ~72 s (séquentiel)
-    # à ~50 s, sans perte de complétude notable ; au-delà de 3, le quota
-    # (HTTP 429) se déclenche et le gain s'évapore en attentes. Le retry 429 du
-    # client, avec jitter, absorbe les saturations ponctuelles.
-    lignes = [tour for _, tour in meilleurs.iterrows()]
-    resultat: dict[str, pd.DataFrame] = {}
-    with ThreadPoolExecutor(max_workers=openf1.REQUETES_SIMULTANEES) as executor:
-        for issue in executor.map(_charger, lignes):
-            if issue is not None:
-                resultat[issue[0]] = issue[1]
-    return resultat
+    Point d'entrée des pages : remplace l'ancien dictionnaire `tel_par_pilote`
+    qui pré-chargeait les 22 pilotes (~45 s) alors que la plupart ne sont jamais
+    consultés. Ici, seul le pilote demandé est récupéré, puis mis en cache.
+
+    Retourne un DataFrame vide si la télémétrie est indisponible pour ce pilote.
+    """
+    infos = data.get("best_laps", {}).get(code_pilote)
+    session_key = data.get("session_key")
+    if not infos or session_key is None:
+        return pd.DataFrame()
+
+    numero = infos.get("DriverNumber")
+    debut = infos.get("DateDebut")
+    duree = infos.get("LapSeconds")
+    if numero is None or not debut or duree is None or pd.isna(duree):
+        return pd.DataFrame()
+
+    try:
+        return _telemetrie_pilote_cache(int(session_key), int(numero), debut, float(duree))
+    except Exception as exc:
+        logger.warning("Télémétrie indisponible pour %s: %s: %s",
+                       code_pilote, type(exc).__name__, exc)
+        return pd.DataFrame()
 
 
 @st.cache_data(show_spinner="Chargement de la session F1…", max_entries=2, ttl=1800)
@@ -193,8 +192,11 @@ def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 6)
         logger.info("Résultats officiels indisponibles: %s", exc)
         resultats = pd.DataFrame()
 
-    tel_par_pilote = _extraire_telemetrie_openf1(session_key, tours)
-
+    # La télémétrie n'est PLUS chargée ici : 22 pilotes coûtaient ~45 s alors
+    # que la Home n'en affiche aucune. Elle est désormais récupérée à la demande,
+    # par pilote, via `telemetrie_pilote()` — voir ce point d'entrée. On ne
+    # retient que ce qu'il faut pour ce chargement paresseux : le meilleur tour
+    # de chaque pilote (numéro, fenêtre temporelle).
     best_laps: dict[str, dict] = {}
     for _, tour in tours[tours.get("IsPersonalBest", False)].iterrows():
         code = tour.get("Driver")
@@ -202,17 +204,19 @@ def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 6)
             best_laps[code] = {
                 "LapTime": tour.get("LapTime"),
                 "LapNumber": int(tour["LapNumber"]) if pd.notna(tour.get("LapNumber")) else None,
+                "DriverNumber": int(tour["DriverNumber"]) if pd.notna(tour.get("DriverNumber")) else None,
+                "DateDebut": tour.get("DateDebut"),
+                "LapSeconds": tour.get("LapSeconds"),
             }
 
-    logger.info("Session chargée: %d tours, %d pilotes, %d avec télémétrie",
-                len(tours), len(driver_codes), len(tel_par_pilote))
+    logger.info("Session chargée: %d tours, %d pilotes (télémétrie à la demande)",
+                len(tours), len(driver_codes))
     return dict(
         nom=session.get("session_name") or sess_type,
         tours=tours,
         pilotes=driver_codes,
         meteo=meteo,
         resultats=resultats,
-        tel_par_pilote=tel_par_pilote,
         best_laps=best_laps,
         session_key=session_key,
     )
@@ -244,10 +248,12 @@ def chargement_session(annee: int, course: str, sess_type: str):
         - pilotes : liste des codes pilotes
         - meteo : DataFrame météo
         - resultats : DataFrame résultats officiels
-        - tel_par_pilote : {code pilote: DataFrame de télémétrie}
-        - best_laps : {code pilote: {LapTime, LapNumber}}
+        - best_laps : {code pilote: infos du meilleur tour (dont fenêtre télémétrie)}
         - session_key : identifiant OpenF1 de la session
         - session : None — conservé pour compatibilité des appels existants
+
+    La télémétrie n'est pas incluse : elle se charge à la demande via
+    `telemetrie_pilote(data, code)` ou `tour_rapide_tel(data, code)`.
     """
     dfs = _chargement_dataframes(annee, course, sess_type)
     return {**dfs, "session": None}
@@ -260,14 +266,13 @@ def tour_rapide_tel(data: dict, code_pilote: str):
     """
     Retourne les infos du meilleur tour et sa télémétrie pour un pilote.
 
-    Utilise les données pré-extraites dans `data` (retour de
-    `chargement_session`) — plus aucun accès à `lap.session` ou
-    `Session.car_data`, ce qui évitait le DataNotLoadedError persistant.
+    La télémétrie est chargée à la demande (voir `telemetrie_pilote`) : seul le
+    pilote demandé est récupéré, pas les 22 de la grille.
 
     Paramètres
     ----------
     data : dict
-        Retour de `chargement_session` (contient `tel_par_pilote`, `best_laps`).
+        Retour de `chargement_session` (contient `best_laps`, `session_key`).
     code_pilote : str
         Code 3-lettres (ex: "HAM", "VER").
 
@@ -281,14 +286,11 @@ def tour_rapide_tel(data: dict, code_pilote: str):
     ValueError
         Si aucune télémétrie disponible pour ce pilote.
     """
-    tel_par_pilote = data.get("tel_par_pilote", {})
-    best_laps = data.get("best_laps", {})
-
-    tel = tel_par_pilote.get(code_pilote)
-    if tel is None or len(tel) == 0:
+    tel = telemetrie_pilote(data, code_pilote)
+    if tel.empty:
         raise ValueError(f"Télémétrie indisponible pour {code_pilote}")
 
-    best = best_laps.get(code_pilote, {})
+    best = data.get("best_laps", {}).get(code_pilote, {})
     return best, tel
 
 def _round_upto(annee: int, upto_event: str) -> int | None:
@@ -608,8 +610,8 @@ def figure_carte_vitesse(tel: pd.DataFrame,
     Paramètres
     ----------
     tel : pd.DataFrame
-        Télémétrie d'un tour (colonnes X, Y et Speed), telle que fournie par
-        `chargement_session` dans `tel_par_pilote`.
+        Télémétrie d'un tour (colonnes X, Y et Speed), telle que renvoyée par
+        `telemetrie_pilote(data, code)`.
     cmap : matplotlib colormap
         Colormap utilisée (par défaut plasma).
     figsize : tuple[float, float]

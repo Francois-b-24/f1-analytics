@@ -38,8 +38,10 @@ def test_chargement_session_contrat():
         pytest.xfail(f"OpenF1 indisponible: {type(exc).__name__}: {exc}")
 
     assert isinstance(d, dict)
+    # La télémétrie n'est plus dans le contrat : elle se charge à la demande
+    # via telemetrie_pilote(). best_laps porte les infos nécessaires.
     attendues = {"nom", "tours", "pilotes", "meteo", "resultats",
-                 "tel_par_pilote", "best_laps", "session_key"}
+                 "best_laps", "session_key"}
     manquantes = attendues - set(d.keys())
     assert not manquantes, f"Clés manquantes dans le retour: {manquantes}"
 

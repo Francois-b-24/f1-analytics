@@ -59,19 +59,22 @@ def _get_best_lap_no(d):
 
 
 colored_header("Télémétries sur le tour le plus rapide", description=None, color_name="blue-70")
-_tel_dispo = data.get("tel_par_pilote", {})
+# La télémétrie est chargée à la demande, uniquement pour le(s) pilote(s)
+# affiché(s). `best_laps` indique quels pilotes ont un tour exploitable.
+_best_laps = data.get("best_laps", {})
 
-if not _tel_dispo:
+if not _best_laps:
     st.info(
         "⏳ Télémétrie indisponible pour cette session. "
         "Les données sont publiées par l'API F1 avec un délai de 24–48 h après la course. "
         "Réessaie plus tard, ou sélectionne une session plus ancienne."
     )
-elif pilote_1 not in _tel_dispo:
+elif pilote_1 not in _best_laps:
     st.warning(f"Télémétrie non disponible pour {pilote_1} sur cette session.")
 else:
     try:
-        d1_fast, tel_1 = tour_rapide_tel(data, pilote_1)
+        with st.spinner(f"Chargement de la télémétrie de {pilote_1}…"):
+            d1_fast, tel_1 = tour_rapide_tel(data, pilote_1)
         fig = px.line(
             tel_1, x='Distance', y='Speed',
             title=f"Tour le plus rapide – {pilote_1}",
@@ -80,8 +83,9 @@ else:
         d2_fast = None
         tel_2 = None
         if pilote_2:
-            if pilote_2 in _tel_dispo:
-                d2_fast, tel_2 = tour_rapide_tel(data, pilote_2)
+            if pilote_2 in _best_laps:
+                with st.spinner(f"Chargement de la télémétrie de {pilote_2}…"):
+                    d2_fast, tel_2 = tour_rapide_tel(data, pilote_2)
                 fig.add_scatter(x=tel_2['Distance'], y=tel_2['Speed'], mode='lines', name=pilote_2)
             else:
                 st.caption(f"Télémétrie non disponible pour {pilote_2}.")

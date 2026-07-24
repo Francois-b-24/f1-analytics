@@ -11,7 +11,7 @@ from src.analytics import (
     resume_proxys_energie,
 )
 from src.config import configure_page
-from src.data import chargement_session
+from src.data import chargement_session, telemetrie_pilote
 from src.theme import ACCENT_BLUE, ACCENT_GOLD, ACCENT_RED, FREINAGE, TRACTION
 from src.ui import selections_courantes
 
@@ -68,9 +68,9 @@ if not loaded:
 
 data = chargement_session(annee, grand_prix, session_type)
 pilotes = data["pilotes"]
-tel_par_pilote = data.get("tel_par_pilote", {})
+best_laps = data.get("best_laps", {})
 
-if not tel_par_pilote:
+if not best_laps:
     st.info(
         "⏳ Télémétrie indisponible pour cette session. "
         "Les données sont publiées avec un délai de 24–48 h après la course. "
@@ -78,13 +78,16 @@ if not tel_par_pilote:
     )
     st.stop()
 
-dispo = [p for p in pilotes if p in tel_par_pilote]
+# Pilotes ayant un meilleur tour exploitable ; la télémétrie elle-même est
+# chargée à la demande, pilote par pilote.
+dispo = [p for p in pilotes if p in best_laps]
 if not dispo:
     st.info("Aucun pilote avec télémétrie exploitable sur cette session.")
     st.stop()
 
 pilote = st.selectbox("Pilote analysé", dispo, key="energie_pilote")
-tel = tel_par_pilote.get(pilote)
+with st.spinner(f"Chargement de la télémétrie de {pilote}…"):
+    tel = telemetrie_pilote(data, pilote)
 
 if tel is None or tel.empty:
     st.warning(f"Télémétrie non disponible pour {pilote}.")
@@ -245,7 +248,10 @@ colored_header(
     color_name="blue-70",
 )
 
-defaut = dispo[: min(8, len(dispo))]
+# Défaut restreint à 4 pilotes : chaque pilote comparé nécessite une requête
+# de télémétrie à la demande, donc un défaut trop large rallongerait l'ouverture
+# de la page. L'utilisateur peut en ajouter, chacun se chargeant à la volée.
+defaut = dispo[: min(4, len(dispo))]
 selection = st.multiselect(
     "Pilotes à comparer",
     options=dispo,
@@ -256,7 +262,13 @@ selection = st.multiselect(
 if not selection:
     st.info("Sélectionne au moins un pilote.")
 else:
-    comparaison = comparaison_proxys_energie(tel_par_pilote, pilotes=selection)
+    # Télémétrie chargée à la demande pour les seuls pilotes comparés.
+    with st.spinner("Chargement de la télémétrie des pilotes comparés…"):
+        tel_selection = {
+            p: t for p in selection
+            if not (t := telemetrie_pilote(data, p)).empty
+        }
+    comparaison = comparaison_proxys_energie(tel_selection, pilotes=selection)
     if comparaison.empty:
         st.info("Données insuffisantes pour la comparaison.")
     else:

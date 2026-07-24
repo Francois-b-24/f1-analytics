@@ -1,7 +1,7 @@
 from src.data import figure_carte_vitesse, figure_carte_rapports
 import streamlit as st
 from src.config import configure_page
-from src.data import chargement_session
+from src.data import chargement_session, telemetrie_pilote
 from src.ui import selections_courantes, selecteur_pilote_unique
 from streamlit_extras.colored_header import colored_header
 
@@ -21,7 +21,7 @@ if not loaded:
 
 data = chargement_session(annee, grand_prix, session_type)
 pilotes = data['pilotes']
-tel_par_pilote = data.get("tel_par_pilote", {})
+best_laps = data.get("best_laps", {})
 
 with st.sidebar:
     pilote = selecteur_pilote_unique(pilotes)
@@ -30,7 +30,7 @@ if not pilote:
     st.warning("Sélectionne un pilote dans la barre latérale pour afficher les cartes.")
     st.stop()
 
-if not tel_par_pilote:
+if not best_laps:
     st.info(
         "⏳ Télémétrie indisponible pour cette session. "
         "Les données sont publiées avec un délai de 24–48 h après la course. "
@@ -38,7 +38,9 @@ if not tel_par_pilote:
     )
     st.stop()
 
-tel = tel_par_pilote.get(pilote)
+# Télémétrie chargée à la demande, uniquement pour le pilote sélectionné.
+with st.spinner(f"Chargement de la télémétrie de {pilote}…"):
+    tel = telemetrie_pilote(data, pilote)
 if tel is None or tel.empty:
     st.warning(f"Télémétrie non disponible pour {pilote} sur cette session.")
     st.stop()

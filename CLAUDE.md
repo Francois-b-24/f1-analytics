@@ -35,12 +35,19 @@ Les 10 pages consomment **une seule fonction**, `chargement_session(annee, cours
 (`src/data.py`), qui renvoie un dict au contrat stable :
 
 ```
-{nom, tours, pilotes, meteo, resultats, tel_par_pilote, best_laps, session_key, session}
+{nom, tours, pilotes, meteo, resultats, best_laps, session_key, session}
 ```
 
 C'est l'invariant structurant du projet : **changer de source de données se fait
 derrière ce contrat**, sans toucher aux pages ni à `src/analytics.py`. La
 migration de FastF1 vers OpenF1 a été menée ainsi.
+
+La **télémétrie n'est pas dans ce dict** : elle est chargée à la demande, pilote
+par pilote, via `telemetrie_pilote(data, code)` (ou `tour_rapide_tel`). Charger
+les 22 pilotes d'emblée coûtait ~45 s alors que 7 pages sur 10 n'en affichent
+aucune ; désormais la session s'ouvre en ~3-4 s et un pilote se charge en ~1 s
+(caché par `_telemetrie_pilote_cache`). `best_laps` porte les infos nécessaires
+au chargement paresseux (numéro, fenêtre temporelle du meilleur tour).
 
 ### Chaîne de données
 
@@ -73,10 +80,10 @@ Conséquences à connaître :
   à `fastf1.get_session()` ou `get_event_schedule()` : ils passent par l'API
   bloquée.
 - **Quota OpenF1 (HTTP 429)** : le client gère le `retry-after` (avec jitter).
-  La télémétrie et les métadonnées sont récupérées à **`openf1.REQUETES_SIMULTANEES`
-  threads** (3) : le coût est réseau à ~99 %, donc c'est la parallélisation
-  bornée qui accélère, pas le regroupement de requêtes. Mesuré : 3 threads est
-  le maximum avant que le quota ne morde et n'annule le gain (~72 s → ~50 s).
+  Les 7 endpoints de métadonnées sont chargés à **`openf1.REQUETES_SIMULTANEES`
+  threads** (3) au chargement de session. Le coût est réseau à ~99 % ; au-delà
+  de 3 threads, le quota morderait et annulerait le gain. La télémétrie, elle,
+  est chargée à la demande (voir plus haut), donc une requête à la fois.
 - **Filtrage temporel obligatoire** pour `car_data` : ~5,5 Mo par pilote sans
   filtre, ~90 Ko sur la fenêtre d'un tour.
 - Les libellés de Grand Prix incluent le lieu (`"United States Grand Prix (Austin)"`)
