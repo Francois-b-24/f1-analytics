@@ -34,6 +34,5 @@ jobs:
           FASTF1_CACHE: ${{ runner.temp }}/fastf1_cache
         run: pytest tests/ -v --tb=short
 
-      - name: Smoke import (vérifie que Streamlit ne crashe pas au boot)
-        run: |
-          python -c "import Home" || echo "Home.py importe OK (st.set_page_config peut échouer hors runtime — normal)"
+      - name: Smoke import du routeur
+        run: python -c "import streamlit_app"

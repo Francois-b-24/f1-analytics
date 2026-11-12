@@ -1,10 +1,7 @@
 import streamlit as st
-from src.config import configure_page
 from src.session import charger_session_ou_stopper
 from src.data import figure_positions_par_tour
 from src.ui import selections_courantes, afficher_figure
-
-configure_page("F1 Analytics – Performances")
 
 st.subheader("Performances")
 st.caption("*Illustration des changements de positions durant la courses*")

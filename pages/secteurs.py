@@ -1,14 +1,11 @@
 import streamlit as st
 import plotly.express as px
 
-from src.config import configure_page
 from src.ui import selections_courantes
 from src.session import charger_session_ou_stopper
 from src.analytics import sector_times_long, sector_best_per_driver
 from streamlit_extras.colored_header import colored_header
 
-
-configure_page("F1 Analytics – Analyse par secteur")
 
 st.subheader("Analyse par secteur")
 st.caption(

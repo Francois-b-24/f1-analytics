@@ -10,13 +10,10 @@ from src.analytics import (
     phases_telemetrie,
     resume_proxys_energie,
 )
-from src.config import configure_page
 from src.session import charger_session_ou_stopper
 from src.data import telemetrie_pilote
 from src.theme import ACCENT_BLUE, ACCENT_GOLD, ACCENT_RED, FREINAGE, TRACTION
 from src.ui import selections_courantes
-
-configure_page("F1 Analytics – Énergie & 2026", page_icon="⚡")
 
 st.subheader("⚡ Énergie & réglementation 2026")
 st.caption(

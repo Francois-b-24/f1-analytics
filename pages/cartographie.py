@@ -1,13 +1,11 @@
 from src.data import figure_carte_vitesse, figure_carte_rapports
 import streamlit as st
-from src.config import configure_page
 from src.session import charger_session_ou_stopper
 from src.data import telemetrie_pilote
 from src.ui import selections_courantes, selecteur_pilote_unique, afficher_figure
 from streamlit_extras.colored_header import colored_header
 
 
-configure_page("F1 Analytics – Cartographie")
 st.subheader("Cartographie")
 st.caption(
     "Tracé du circuit coloré par la vitesse et par le rapport engagé, "
