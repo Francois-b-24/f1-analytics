@@ -487,3 +487,137 @@ def comparaison_proxys_energie(
     if not rows:
         return pd.DataFrame()
     return pd.DataFrame(rows).sort_values("part_traction", ascending=False).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# F6 — Arrêts aux stands
+# ---------------------------------------------------------------------------
+# `PitInTime` porte la **durée** d'immobilisation (issue de `pit_duration`
+# d'OpenF1), pas un instant : voir `adaptateurs.construire_tours`. Ces
+# fonctions n'exploitent donc que des données déjà chargées — aucun appel
+# réseau supplémentaire.
+
+def arrets_par_pilote(tours: pd.DataFrame) -> pd.DataFrame:
+    """Un arrêt par ligne : pilote, équipe, tour, durée, pneu chaussé ensuite.
+
+    Retourne un DataFrame vide si la session n'a aucun arrêt renseigné (cas
+    courant en essais libres).
+    """
+    if tours is None or tours.empty or "PitInTime" not in tours.columns:
+        return pd.DataFrame()
+
+    arrets = tours[tours["PitInTime"].notna()].copy()
+    if arrets.empty:
+        return pd.DataFrame()
+
+    arrets["DureeSec"] = pd.to_timedelta(arrets["PitInTime"]).dt.total_seconds()
+    # Une durée nulle ou négative traduit une donnée absente, pas un arrêt éclair.
+    arrets = arrets[arrets["DureeSec"] > 0]
+    if arrets.empty:
+        return pd.DataFrame()
+
+    colonnes = {"Driver": "Pilote", "LapNumber": "Tour", "DureeSec": "Duree"}
+    if "Team" in arrets.columns:
+        colonnes["Team"] = "Equipe"
+    if "Compound" in arrets.columns:
+        colonnes["Compound"] = "Composé"
+
+    resultat = arrets[list(colonnes)].rename(columns=colonnes)
+    return resultat.sort_values(["Tour", "Duree"]).reset_index(drop=True)
+
+
+def resume_arrets(arrets: pd.DataFrame) -> dict[str, float | str | None]:
+    """Indicateurs d'ensemble : total, médiane, arrêt le plus rapide.
+
+    La médiane plutôt que la moyenne : un seul arrêt problématique (problème
+    technique, pénalité purgée) décalerait la moyenne et donnerait une image
+    fausse du rythme habituel de l'équipe.
+    """
+    if arrets is None or arrets.empty:
+        return {"nombre": 0, "mediane": None, "plus_rapide": None,
+                "pilote_plus_rapide": None, "pilotes": 0}
+
+    plus_rapide = arrets.loc[arrets["Duree"].idxmin()]
+    return {
+        "nombre": int(len(arrets)),
+        "mediane": float(arrets["Duree"].median()),
+        "plus_rapide": float(plus_rapide["Duree"]),
+        "pilote_plus_rapide": str(plus_rapide["Pilote"]),
+        "pilotes": int(arrets["Pilote"].nunique()),
+    }
+
+
+def arrets_par_equipe(arrets: pd.DataFrame) -> pd.DataFrame:
+    """Rythme aux stands par écurie, du plus rapide au plus lent."""
+    if arrets is None or arrets.empty or "Equipe" not in arrets.columns:
+        return pd.DataFrame()
+
+    groupes = arrets.groupby("Equipe")["Duree"]
+    resultat = pd.DataFrame({
+        "Arrêts": groupes.size(),
+        "Médiane": groupes.median().round(2),
+        "Meilleur": groupes.min().round(2),
+    }).reset_index()
+    return resultat.sort_values("Médiane").reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# F7 — Évolution des positions
+# ---------------------------------------------------------------------------
+
+def bilan_positions(tours: pd.DataFrame) -> pd.DataFrame:
+    """Position de départ, d'arrivée et solde pour chaque pilote.
+
+    Le solde est positif quand le pilote a gagné des places. Les pilotes sans
+    position renseignée sont écartés : c'est le cas hors course, où OpenF1 ne
+    publie pas ce canal.
+    """
+    if tours is None or tours.empty:
+        return pd.DataFrame()
+    if not {"Driver", "LapNumber", "Position"}.issubset(tours.columns):
+        return pd.DataFrame()
+
+    valides = tours.dropna(subset=["Position", "LapNumber"])
+    if valides.empty:
+        return pd.DataFrame()
+
+    lignes = []
+    for code, groupe in valides.groupby("Driver"):
+        ordonne = groupe.sort_values("LapNumber")
+        depart = int(ordonne["Position"].iloc[0])
+        arrivee = int(ordonne["Position"].iloc[-1])
+        lignes.append({
+            "Pilote": code,
+            "Départ": depart,
+            "Arrivée": arrivee,
+            # Position 1 = tête : gagner des places fait *baisser* le numéro.
+            "Solde": depart - arrivee,
+            "MeilleurePosition": int(ordonne["Position"].min()),
+        })
+
+    if not lignes:
+        return pd.DataFrame()
+    return pd.DataFrame(lignes).sort_values("Solde", ascending=False).reset_index(drop=True)
+
+
+def changements_de_position(tours: pd.DataFrame) -> int:
+    """Nombre de changements de position observés au fil de la course.
+
+    Mesure l'agitation de la course. Ce n'est pas un décompte de dépassements :
+    un arrêt aux stands en produit aussi, et la donnée ne permet pas de les
+    distinguer.
+    """
+    if tours is None or tours.empty:
+        return 0
+    if not {"Driver", "LapNumber", "Position"}.issubset(tours.columns):
+        return 0
+
+    valides = tours.dropna(subset=["Position", "LapNumber"])
+    if valides.empty:
+        return 0
+
+    total = 0
+    for _, groupe in valides.groupby("Driver"):
+        positions = groupe.sort_values("LapNumber")["Position"]
+        total += int((positions.diff().fillna(0) != 0).sum())
+    return total
