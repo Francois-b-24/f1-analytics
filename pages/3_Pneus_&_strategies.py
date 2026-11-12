@@ -38,7 +38,7 @@ if {'Stint', 'Compound', 'LapNumber'}.issubset(tours.columns):
              Compound=('Compound', 'last'))
         .reset_index()
     )
-    st.dataframe(stint_ranges, use_container_width=True)
+    st.dataframe(stint_ranges, width="stretch")
 
     st.subheader("Performance moyenne par stint (temps moyen)")
     perf = (
@@ -122,7 +122,7 @@ if selected_drivers:
             display["Intercept"] = display["Intercept"].round(3)
             display["R2"] = display["R2"].round(3)
             display = display.rename(columns={"Slope": "Slope (s/tour)", "Intercept": "Base (s)"})
-            st.dataframe(display, use_container_width=True)
+            st.dataframe(display, width="stretch")
 
 # ---------------------------------------------------------------------------
 # F4 — Heatmap de dégradation (Driver × LapNumber → Δ au PB personnel)

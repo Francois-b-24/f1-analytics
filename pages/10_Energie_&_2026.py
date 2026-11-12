@@ -237,7 +237,7 @@ else:
             "VitesseSortie": "V. sortie (km/h)",
         }
     )
-    st.dataframe(affichage, use_container_width=True, hide_index=True)
+    st.dataframe(affichage, width="stretch", hide_index=True)
 
 # ---------------------------------------------------------------------------
 # Comparaison entre pilotes
@@ -304,7 +304,7 @@ else:
                 "vitesse_max": "V. max (km/h)",
             }
         )
-        st.dataframe(tableau, use_container_width=True, hide_index=True)
+        st.dataframe(tableau, width="stretch", hide_index=True)
 
 st.caption(
     "⚠️ Rappel : aucune de ces valeurs ne provient d'une mesure d'énergie. "

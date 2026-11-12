@@ -56,7 +56,7 @@ else:
     for c in ("DeltaS1", "DeltaS2", "DeltaS3", "DeltaTotal"):
         if c in display.columns:
             display[c] = display[c].round(3)
-    st.dataframe(display, use_container_width=True)
+    st.dataframe(display, width="stretch")
 
 # ---------------------------------------------------------------------------
 # Distribution des temps par secteur (box-plot)

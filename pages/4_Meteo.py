@@ -20,7 +20,7 @@ data = chargement_session(annee, grand_prix, session_type)
 meteo = data["meteo"]
 
 if not meteo.empty:
-    st.dataframe(meteo, use_container_width=True)
+    st.dataframe(meteo, width="stretch")
     xcol = 'SessionTimeSec' if 'SessionTimeSec' in meteo else 'Time'
     # --- KPI : Écart moyen entre la température piste et air ---
     if 'AirTemp' in meteo and 'TrackTemp' in meteo:

@@ -47,8 +47,8 @@ if tel is None or tel.empty:
 
 colored_header("Vitesse sur le tour le plus rapide", description=None, color_name="blue-70")
 fig = figure_carte_vitesse(tel)
-st.pyplot(fig, use_container_width=True)
+st.pyplot(fig, width="stretch")
 
 colored_header("Changements de rapport sur le tour le plus rapide", description=None, color_name="blue-70")
 fig = figure_carte_rapports(tel)
-st.pyplot(fig, use_container_width=True)
+st.pyplot(fig, width="stretch")

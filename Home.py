@@ -115,7 +115,7 @@ if not tours.empty and 'LapTime' in tours:
     top = pd.DataFrame(top).copy()
     top['LapTimeStr'] = top['LapTime'].apply(formatage_timedelta)
     top_display = top[['Driver','LapNumber','LapTimeStr','Compound','Stint']]
-    st.dataframe(top_display, use_container_width=True)
+    st.dataframe(top_display, width="stretch")
 else:
     st.info("Pas de données de tours.")
 
@@ -153,6 +153,6 @@ if not resultats.empty:
             except Exception:
                 pass
     st.markdown("Résultats officiels **(si disponibles)**")
-    st.dataframe(res, use_container_width=True)
+    st.dataframe(res, width="stretch")
 else:
     st.info("Résultats non disponibles pour cette session.")

@@ -153,7 +153,7 @@ table = subset[[c for c in colonnes if c in subset.columns]].copy()
 if 'LapTime' in table:
     table['LapTime'] = table['LapTime'].apply(formatage_timedelta)
 if not table.empty:
-    st.dataframe(table, use_container_width=True)
+    st.dataframe(table, width="stretch")
     st.download_button(
         "Télécharger CSV",
         data=table.to_csv(index=False).encode('utf-8'),
