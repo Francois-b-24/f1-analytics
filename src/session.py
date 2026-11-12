@@ -1,6 +1,6 @@
 """Chargement de session avec gestion d'erreur unifiée pour toutes les pages.
 
-Avant ce module, seul `Home.py` traitait les échecs de chargement : les dix
+Avant ce module, seul l'accueil traitait les échecs de chargement : les dix
 pages appelaient `chargement_session` à nu. Arriver sur une page par lien direct
 pendant une panne OpenF1 affichait donc une traceback brute.
 

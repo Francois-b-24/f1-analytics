@@ -266,7 +266,7 @@ def chargement_session(annee: int, course: str, sess_type: str):
     return {**dfs, "session": None}
 
 
-# Expose .clear() comme avant pour Home.py (bouton "Réessayer")
+# Expose .clear() pour le bouton "Réessayer" (src/session.py)
 chargement_session.clear = _chargement_dataframes.clear
 
 def tour_rapide_tel(data: dict, code_pilote: str):

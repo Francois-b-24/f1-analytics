@@ -94,7 +94,8 @@ est présenté comme une estimation, sans vérité terrain pour le valider.
 
 ```
 f1-analytics/
-├─ Home.py                       # Point d'entrée Streamlit (overview + KPIs)
+├─ streamlit_app.py              # Routeur st.navigation (point d'entrée)
+├─ pages/accueil.py              # Overview + KPIs du week-end
 ├─ src/                          # Modules internes
 │  ├─ config.py                  # Setup pages, logging, Sentry, thème
 │  ├─ openf1.py                  # Client HTTP OpenF1 (tous les appels réseau)
@@ -150,7 +151,7 @@ pip install -r requirements.txt
 ### Lancer l'app
 
 ```bash
-streamlit run Home.py
+streamlit run streamlit_app.py
 ```
 
 ### Lancer les tests
@@ -251,7 +252,7 @@ inaperçue.
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) exécute à chaque push/PR :
 - `ruff check` (**bloquant**)
 - `pytest tests/`
-- Smoke import de `Home.py`
+- Smoke import de `streamlit_app.py`
 
 Les tests d'`analytics`, de `figures` et d'`utils` sont entièrement hors-ligne
 (fixtures synthétiques) ; seul `test_data_smoke.py` requiert le réseau et se

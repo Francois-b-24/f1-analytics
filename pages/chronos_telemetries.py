@@ -2,7 +2,6 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 
-from src.config import configure_page
 from src.ui import selecteurs_pilotes, selections_courantes
 from src.session import charger_session_ou_stopper
 from src.data import tour_rapide_tel
@@ -11,8 +10,6 @@ from src.analytics import delta_time_vs_distance
 
 from streamlit_extras.colored_header import colored_header
 
-
-configure_page("F1 Analytics – Tours & Chronos")
 
 st.subheader("Tours & Chronos")
 st.caption("Comparaison des performances entre 2 pilotes possible.")

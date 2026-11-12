@@ -9,7 +9,7 @@ Community Cloud : <https://f1-fastanalytics.streamlit.app>.
 
 ```bash
 # Lancer l'application
-streamlit run Home.py
+streamlit run streamlit_app.py
 
 # Tests — les fichiers analytics/adaptateurs/figures/utils sont 100 % hors ligne
 pytest tests/ -v
@@ -113,8 +113,24 @@ cohérentes : `src/theme.py`, `f1_theme.css` (bloc `:root`) et
 
 ### Contraintes Streamlit
 
-- `st.set_page_config()` doit précéder tout autre appel `st.*` : d'où
-  l'ignorance de `E402` sur `Home.py` et `pages/*.py` dans `pyproject.toml`.
+- La navigation passe par `st.navigation`/`st.Page` : `streamlit_app.py` est le
+  routeur et **le seul** à appeler `st.set_page_config()`. Les pages de `pages/`
+  ne le font plus — un second appel ne lève pas (il est additif, le dernier
+  gagne) mais écraserait silencieusement le titre d'onglet et le menu « About »
+  du routeur. `tests/test_navigation.py` garde ce contrat.
+- Le registre des pages est `src/navigation.py` : libellés, icônes et `url_path`
+  y sont déclarés. `url_path` est **épinglé** pour qu'un renommage de fichier ne
+  casse ni les liens ni les favoris.
+- Le sélecteur de session (`selecteurs_session_sidebar`, `src/ui.py`) est rendu
+  par le routeur dans la barre latérale, donc disponible sur toutes les pages.
+  Il est décoré `@st.fragment` : ne pas y appeler `st.sidebar` (Streamlit
+  l'interdit depuis un fragment — c'est l'appelant qui ouvre le contexte), et
+  tout `st.rerun()` y doit porter `scope="app"`, sinon seul le fragment est
+  relancé.
+- Piège figé par les tests : un `st.selectbox` recevant **à la fois** `key=` et
+  un `index=` dérivé de l'état validé boucle sur lui-même — au rerun, l'index
+  est recalculé depuis l'ancienne valeur et écrase le choix de l'utilisateur.
+  D'où `_index_initial()`, qui ne fournit `index` qu'au premier rendu.
 - Chaque page appelle `selections_courantes(required=True)` (`src/ui.py`), qui
   arrête la page si aucune session n'est chargée.
 - Le contenu d'un `st.dataframe` est rendu en canvas : `inner_text` ne le voit

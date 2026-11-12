@@ -2,11 +2,8 @@ import streamlit as st
 import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-from src.config import configure_page
 from src.ui import selections_courantes
 from src.session import charger_session_ou_stopper
-
-configure_page("F1 Analytics – Météo")
 
 st.subheader("Données météo de la session")
 

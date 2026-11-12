@@ -3,7 +3,6 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
-from src.config import configure_page
 from src.ui import selections_courantes
 from src.session import charger_session_ou_stopper
 from src.analytics import (
@@ -11,8 +10,6 @@ from src.analytics import (
     stint_degradation_fits,
     tyre_degradation_matrix,
 )
-
-configure_page("F1 Analytics – Pneus & Stratégie")
 
 st.subheader("Pneus & Stratégie")
 

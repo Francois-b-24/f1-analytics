@@ -1,6 +1,5 @@
 import streamlit as st
-from src.config import configure_page_home
-from src.ui import selecteurs_session, sidebar_hint_once
+from src.ui import selections_courantes, sidebar_hint_once
 from src.session import charger_session_ou_stopper
 from src.utils import formatage_timedelta
 from src.theme import COMPOSES, ORDRE_COMPOSES
@@ -9,8 +8,6 @@ import pandas as pd
 from streamlit_extras.colored_header import colored_header
 from streamlit_extras.add_vertical_space import add_vertical_space
 
-
-configure_page_home("F1 Analytics – Home")
 
 st.markdown(
     """
@@ -31,13 +28,10 @@ st.markdown(
 
 
 sidebar_hint_once()
-# selecteurs_session() gère déjà la persistance dans st.session_state
-annee, grand_prix, session_type, loaded = selecteurs_session()
 
-
-if not loaded:
-    st.info("Sélectionnez une année, un Grand Prix et un type de session, puis **Charger**")
-    st.stop()
+# Les sélecteurs sont rendus par le routeur dans la barre latérale : on ne lit
+# ici que la session retenue, et on s'arrête si rien n'est encore chargé.
+annee, grand_prix, session_type, _ = selections_courantes(required=True)
 
 _data = charger_session_ou_stopper(annee, grand_prix, session_type)
 session = session_type

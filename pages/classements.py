@@ -1,5 +1,4 @@
 import streamlit as st
-from src.config import configure_page
 from src.ui import selections_courantes
 from src.session import charger_session_ou_stopper
 from src.data import (
@@ -7,8 +6,6 @@ from src.data import (
     calcul_classement_pilote,
     calcul_classement_constructeur,
 )
-
-configure_page("F1 Analytics – Classements")
 
 t1, t2 = st.tabs(["Classement session", "Championnat"])
 

@@ -1,9 +1,6 @@
 import streamlit as st
-from src.config import configure_page
 from src.ui import selections_courantes
 from src.session import charger_session_ou_stopper
-
-configure_page("F1 Analytics – Export & Données")
 
 st.subheader("Exports rapides")
 
