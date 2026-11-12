@@ -2,11 +2,11 @@ from src.data import figure_carte_vitesse, figure_carte_rapports
 import streamlit as st
 from src.session import charger_session_ou_stopper
 from src.data import telemetrie_pilote
-from src.ui import selections_courantes, selecteur_pilote_unique, afficher_figure
+from src.ui import selections_courantes, selecteur_pilote_unique, afficher_figure, entete_page
 from streamlit_extras.colored_header import colored_header
 
 
-st.subheader("Cartographie")
+entete_page("cartographie")
 st.caption(
     "Tracé du circuit coloré par la vitesse et par le rapport engagé, "
     "sur le tour le plus rapide du pilote sélectionné."

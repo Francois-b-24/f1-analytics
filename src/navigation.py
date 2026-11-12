@@ -51,10 +51,16 @@ _STRUCTURE: dict[str, list[dict[str, str]]] = {
         {"fichier": "pages/exports.py", "titre": "Exports de données",
          "icone": ":material/download:", "url": "exports"},
     ],
+    "À propos": [
+        {"fichier": "pages/glossaire.py", "titre": "Glossaire & méthodologie",
+         "icone": ":material/menu_book:", "url": "glossaire"},
+    ],
 }
 
-# Page d'accueil, exposée pour les liens de retour (voir `page_accueil`).
+# Pages référencées ailleurs par un lien : on expose un constructeur plutôt
+# qu'un chemin en dur, pour qu'un renommage ne casse pas le lien.
 _FICHIER_ACCUEIL = "pages/accueil.py"
+_FICHIER_GLOSSAIRE = "pages/glossaire.py"
 
 
 def construire_sections() -> dict[str, list]:
@@ -93,3 +99,13 @@ def page_accueil():
 def entrees_declarees() -> list[dict[str, str]]:
     """Toutes les entrées, à plat — utilisé par les tests de cohérence."""
     return [entree for entrees in _STRUCTURE.values() for entree in entrees]
+
+
+def page_glossaire():
+    """Objet `st.Page` du glossaire, pour le lien depuis la barre latérale."""
+    return st.Page(
+        _FICHIER_GLOSSAIRE,
+        title="Glossaire & méthodologie",
+        icon=":material/menu_book:",
+        url_path="glossaire",
+    )

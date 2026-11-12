@@ -311,3 +311,48 @@ def afficher_figure(fig) -> None:
 
     st.pyplot(fig, width="stretch")
     plt.close(fig)
+
+
+def entete_page(page: str) -> None:
+    """En-tête homogène : titre, accroche, et « Comment lire » si disponible.
+
+    Volontairement limité à l'en-tête. Le corps de chaque page reste du
+    Streamlit direct : une abstraction qui engloberait tout le rendu
+    rendrait les pages illisibles pour un gain cosmétique.
+
+    `page` est le nom du module (sans .py), clé de `src.pedagogie.EXPLICATIONS`.
+    """
+    from .pedagogie import explication
+
+    textes = explication(page)
+    st.title(textes["titre"])
+
+    if textes.get("accroche"):
+        st.caption(textes["accroche"])
+
+    if textes.get("lecture"):
+        with st.popover("Comment lire cette page", icon=":material/help:"):
+            st.markdown(textes["lecture"])
+
+
+# Termes montrés en raccourci dans la barre latérale. Constante plutôt que
+# littéral enfoui : un test vérifie qu'ils existent bien dans le glossaire.
+TERMES_RACCOURCI = (
+    "Relais (stint)", "Composé", "Dégradation", "Delta", "Secteur", "Undercut",
+)
+
+
+def glossaire_sidebar() -> None:
+    """Accès au glossaire depuis la barre latérale, donc depuis chaque page.
+
+    Un popover plutôt qu'un expander : fermé, il n'occupe qu'une ligne et ne
+    repousse pas les sélecteurs de session vers le bas.
+    """
+    from .navigation import page_glossaire
+    from .pedagogie import GLOSSAIRE
+
+    with st.popover("Glossaire F1", icon=":material/menu_book:", width="stretch"):
+        st.caption("Les termes les plus courants — la page complète en liste davantage.")
+        for terme in TERMES_RACCOURCI:
+            st.markdown(f"**{terme}** — {GLOSSAIRE[terme]}")
+        st.page_link(page_glossaire(), label="Voir tout le glossaire")

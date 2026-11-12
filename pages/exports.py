@@ -1,8 +1,8 @@
 import streamlit as st
-from src.ui import selections_courantes
+from src.ui import selections_courantes, entete_page
 from src.session import charger_session_ou_stopper
 
-st.subheader("Exports rapides")
+entete_page("exports")
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 
