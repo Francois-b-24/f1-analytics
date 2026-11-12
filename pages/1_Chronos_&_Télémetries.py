@@ -4,7 +4,8 @@ import plotly.graph_objects as go
 
 from src.config import configure_page
 from src.ui import selecteurs_pilotes, selections_courantes
-from src.data import chargement_session, tour_rapide_tel
+from src.session import charger_session_ou_stopper
+from src.data import tour_rapide_tel
 from src.utils import formatage_timedelta
 from src.analytics import delta_time_vs_distance
 
@@ -18,13 +19,9 @@ st.caption("Comparaison des performances entre 2 pilotes possible.")
 
 # 1) Récupérer les sélections faites sur Home
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
-if not loaded:
-    st.warning("Aucune session n'est chargée. Retournez à l'accueil.")
-    st.page_link("Home.py", label="🏠 Retour à la Home")
-    st.stop()
 
 # 2) Charger les données une seule fois (cache côté src.data)
-data = chargement_session(annee, grand_prix, session_type)
+data = charger_session_ou_stopper(annee, grand_prix, session_type)
 tours = data["tours"]
 pilotes = data["pilotes"]
 
