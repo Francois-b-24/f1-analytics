@@ -13,9 +13,9 @@ from src.analytics import (
 from src.session import charger_session_ou_stopper
 from src.data import telemetrie_pilote
 from src.theme import ACCENT_BLUE, ACCENT_GOLD, ACCENT_RED, FREINAGE, TRACTION
-from src.ui import selections_courantes
+from src.ui import selections_courantes, entete_page
 
-st.subheader("⚡ Énergie & réglementation 2026")
+entete_page("energie_2026")
 st.caption(
     "Lecture du comportement énergétique d'un tour à partir de la télémétrie publiée."
 )
@@ -178,7 +178,7 @@ if {"Distance", "Speed"}.issubset(tel.columns):
         height=420,
         hovermode="x unified",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.caption(
         "En 2026, la puissance électrique décroît au-delà de "
         f"{DEPLOY_TAPER_START_KMH:.0f} km/h. Les portions du tour situées au-dessus "
@@ -218,7 +218,7 @@ else:
         labels={"Longueur": "Distance (m)", "Phase": ""},
     )
     fig_ph.update_layout(height=260, xaxis_title="Distance sur le tour (m)")
-    st.plotly_chart(fig_ph, use_container_width=True)
+    st.plotly_chart(fig_ph, width="stretch")
 
     affichage = phases.copy()
     for col in ("DistanceDebut", "DistanceFin", "Longueur", "VitesseEntree", "VitesseSortie"):
@@ -232,7 +232,7 @@ else:
             "VitesseSortie": "V. sortie (km/h)",
         }
     )
-    st.dataframe(affichage, use_container_width=True, hide_index=True)
+    st.dataframe(affichage, width="stretch", hide_index=True)
 
 # ---------------------------------------------------------------------------
 # Comparaison entre pilotes
@@ -281,7 +281,7 @@ else:
         fig_cmp.update_layout(height=400, yaxis_tickformat=".0%")
         newnames = {"part_freinage": "Freinage", "part_traction": "Pleine charge"}
         fig_cmp.for_each_trace(lambda t: t.update(name=newnames.get(t.name, t.name)))
-        st.plotly_chart(fig_cmp, use_container_width=True)
+        st.plotly_chart(fig_cmp, width="stretch")
 
         tableau = comparaison[
             ["Pilote", "part_freinage", "part_traction", "part_au_dela_taper",
@@ -299,7 +299,7 @@ else:
                 "vitesse_max": "V. max (km/h)",
             }
         )
-        st.dataframe(tableau, use_container_width=True, hide_index=True)
+        st.dataframe(tableau, width="stretch", hide_index=True)
 
 st.caption(
     "⚠️ Rappel : aucune de ces valeurs ne provient d'une mesure d'énergie. "

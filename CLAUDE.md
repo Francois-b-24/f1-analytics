@@ -104,6 +104,12 @@ un thème clair laisserait des graphiques noirs). `appliquer_theme_plotly()` est
 appelée par `configure_page()`, donc toutes les figures Plotly héritent du thème
 sans modification page par page.
 
+`f1_theme.css` expose une classe de carte réutilisable (`.f1-carte`) et un
+bloc `@media (max-width: 900px)` qui resserre les métriques sur petit écran.
+La police est la **pile système** : `'Inter'` était nommée sans jamais être
+chargée (ni `@import` ni `@font-face`), donc tous les postes y retombaient
+déjà ; l'importer coûterait une requête bloquante au premier rendu.
+
 Les palettes ne se choisissent pas à l'œil : elles sont validées (bande de
 luminosité, plancher de chroma, séparation daltonisme, contraste sur la
 surface). Le thème est **clair** (`#f7f8fa`) et les valeurs d'un thème sombre
@@ -133,6 +139,17 @@ cohérentes : `src/theme.py`, `f1_theme.css` (bloc `:root`) et
   D'où `_index_initial()`, qui ne fournit `index` qu'au premier rendu.
 - Chaque page appelle `selections_courantes(required=True)` (`src/ui.py`), qui
   arrête la page si aucune session n'est chargée.
+- Chaque page commence par `entete_page("<module>")` (`src/ui.py`) : titre,
+  accroche et « Comment lire cette page ». Les textes vivent dans
+  `src/pedagogie.py`, pas dans les pages — c'est du contenu éditorial, relu
+  souvent, et `tests/test_pedagogie.py` vérifie la bijection page ↔ texte.
+  Seul `pages/accueil.py` garde un titre en HTML stylé (identité visuelle).
+- `use_container_width` est **déprécié** (retrait annoncé après le 31/12/2025) :
+  utiliser `width="stretch"` ou `width="content"`.
+  `tests/test_coherence_pages.py` l'interdit.
+- Les tableaux passent par `st.dataframe`, jamais par
+  `st.write(df.to_html(...), unsafe_allow_html=True)` : le HTML brut prive du
+  tri, du redimensionnement et du style `.stDataFrame`.
 - Le contenu d'un `st.dataframe` est rendu en canvas : `inner_text` ne le voit
   pas — ne pas conclure à une page vide sur cette seule base lors d'un test
   automatisé.

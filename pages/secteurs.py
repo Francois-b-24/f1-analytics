@@ -1,13 +1,13 @@
 import streamlit as st
 import plotly.express as px
 
-from src.ui import selections_courantes
+from src.ui import selections_courantes, entete_page
 from src.session import charger_session_ou_stopper
 from src.analytics import sector_times_long, sector_best_per_driver
 from streamlit_extras.colored_header import colored_header
 
 
-st.subheader("Analyse par secteur")
+entete_page("secteurs")
 st.caption(
     "Décomposition des temps au tour en 3 secteurs. Permet d'identifier "
     "dans quelle portion du circuit un pilote gagne ou perd du temps."
@@ -50,7 +50,7 @@ else:
     for c in ("DeltaS1", "DeltaS2", "DeltaS3", "DeltaTotal"):
         if c in display.columns:
             display[c] = display[c].round(3)
-    st.dataframe(display, use_container_width=True)
+    st.dataframe(display, width="stretch")
 
 # ---------------------------------------------------------------------------
 # Distribution des temps par secteur (box-plot)
@@ -71,7 +71,7 @@ else:
     )
     fig_box.update_yaxes(matches=None, showticklabels=True)
     fig_box.update_layout(showlegend=False, height=450)
-    st.plotly_chart(fig_box, use_container_width=True)
+    st.plotly_chart(fig_box, width="stretch")
 
     # Évolution des temps de secteur par numéro de tour
     colored_header("Évolution des temps par secteur", description=None, color_name="blue-70")
@@ -85,4 +85,4 @@ else:
         height=700,
     )
     fig_evo.update_yaxes(matches=None)
-    st.plotly_chart(fig_evo, use_container_width=True)
+    st.plotly_chart(fig_evo, width="stretch")

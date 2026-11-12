@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 
-from src.ui import selecteurs_pilotes, selections_courantes
+from src.ui import selecteurs_pilotes, selections_courantes, entete_page
 from src.session import charger_session_ou_stopper
 from src.data import tour_rapide_tel
 from src.utils import formatage_timedelta
@@ -11,7 +11,7 @@ from src.analytics import delta_time_vs_distance
 from streamlit_extras.colored_header import colored_header
 
 
-st.subheader("Tours & Chronos")
+entete_page("chronos_telemetries")
 st.caption("Comparaison des performances entre 2 pilotes possible.")
 
 # 1) Récupérer les sélections faites sur Home
@@ -32,7 +32,7 @@ colored_header("Évolution des temps au tour (en secondes)", description=None, c
 if not subset.empty and subset['LapSeconds'].notna().any():
     fig = px.line(subset, x='LapNumber', y='LapSeconds', color='Driver', labels={'LapSeconds': 'Temps (s)'})
     fig.update_xaxes(title_text="Tours")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 else:
     st.info("Données de tours insuffisantes.")
 
@@ -83,7 +83,7 @@ else:
                 fig.add_scatter(x=tel_2['Distance'], y=tel_2['Speed'], mode='lines', name=pilote_2)
             else:
                 st.caption(f"Télémétrie non disponible pour {pilote_2}.")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         if pilote_2 and d2_fast:
             c1, c2, c3 = st.columns(3)
@@ -126,7 +126,7 @@ else:
                     yaxis_title=f"Δ temps (s) — négatif = {pilote_2} devant",
                     hovermode="x unified",
                 )
-                st.plotly_chart(fig_delta, use_container_width=True)
+                st.plotly_chart(fig_delta, width="stretch")
                 final_delta = float(delta_df["Delta"].iloc[-1])
                 st.caption(
                     f"Écart final : **{final_delta:+.3f} s** "
@@ -147,7 +147,7 @@ table = subset[[c for c in colonnes if c in subset.columns]].copy()
 if 'LapTime' in table:
     table['LapTime'] = table['LapTime'].apply(formatage_timedelta)
 if not table.empty:
-    st.dataframe(table, use_container_width=True)
+    st.dataframe(table, width="stretch")
     st.download_button(
         "Télécharger CSV",
         data=table.to_csv(index=False).encode('utf-8'),

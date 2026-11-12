@@ -1,5 +1,5 @@
 import streamlit as st
-from src.ui import selections_courantes
+from src.ui import entete_page, selections_courantes
 from src.session import charger_session_ou_stopper
 from src.data import (
     classement_session,
@@ -7,20 +7,23 @@ from src.data import (
     calcul_classement_constructeur,
 )
 
-t1, t2 = st.tabs(["Classement session", "Championnat"])
+entete_page("classements")
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
-
 
 data = charger_session_ou_stopper(annee, grand_prix, session_type)
 tours = data["tours"]
 resultats = data["resultats"]
 
+# Onglets créés après la garde : sinon ils s'affichent, vides, au-dessus du
+# message expliquant qu'aucune session n'est chargée.
+t1, t2 = st.tabs(["Classement session", "Championnat"])
+
 with t1:
     st.subheader(f"Classement – {session_type}")
     cls = classement_session(tours, resultats, session_type)
     if not cls.empty:
-        st.write(cls.to_html(escape=False, index=False), unsafe_allow_html=True)
+        st.dataframe(cls, hide_index=True, width="stretch")
     else:
         st.info("Classement indisponible pour cette session.")
 
@@ -31,7 +34,7 @@ with t2:
         with st.spinner("Calcul des points cumulés pilotes..."):
             standings = calcul_classement_pilote(annee, grand_prix)
         if not standings.empty:
-            st.write(standings.to_html(escape=False, index=False), unsafe_allow_html=True)
+            st.dataframe(standings, hide_index=True, width="stretch")
         else:
             st.info("Classement pilotes indisponible (données incomplètes ou accès réseau).")
     with ctab2:
@@ -39,6 +42,6 @@ with t2:
         with st.spinner("Calcul des points cumulés constructeurs..."):
             cstand = calcul_classement_constructeur(annee, grand_prix)
         if not cstand.empty:
-            st.write(cstand.to_html(escape=False, index=False), unsafe_allow_html=True)
+            st.dataframe(cstand, hide_index=True, width="stretch")
         else:
             st.info("Classement constructeurs indisponible (données incomplètes ou accès réseau).")

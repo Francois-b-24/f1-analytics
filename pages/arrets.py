@@ -1,9 +1,9 @@
 import streamlit as st
-from src.ui import selections_courantes
+from src.ui import selections_courantes, entete_page
 from src.session import charger_session_ou_stopper
 from src.utils import formatage_timedelta
 
-st.subheader("Arrêts aux stands")
+entete_page("arrets")
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 
@@ -27,6 +27,6 @@ if 'PitInTime' in tours or 'PitOutTime' in tours or 'PitStop' in tours:
     for c in ['PitInTime', 'PitOutTime']:
         if c in pits:
             pits[c] = pits[c].apply(formatage_timedelta)
-    st.dataframe(pits, use_container_width=True)
+    st.dataframe(pits, width="stretch")
 else:
     st.info("Aucune donnée d'arrêt aux stands disponible.")

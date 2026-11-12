@@ -14,7 +14,7 @@ import streamlit as st
 
 from src.config import configure_page_home
 from src.navigation import construire_sections
-from src.ui import selecteurs_session_sidebar
+from src.ui import glossaire_sidebar, selecteurs_session_sidebar
 
 configure_page_home(
     "F1 Analytics",
@@ -34,5 +34,7 @@ configure_page_home(
 # une fonction décorée `@st.fragment` d'ouvrir elle-même la barre latérale.
 with st.sidebar:
     selecteurs_session_sidebar()
+    # Accessible depuis chaque page, sans dupliquer les définitions.
+    glossaire_sidebar()
 
 st.navigation(construire_sections()).run()

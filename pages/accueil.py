@@ -3,6 +3,7 @@ from src.ui import selections_courantes, sidebar_hint_once
 from src.session import charger_session_ou_stopper
 from src.utils import formatage_timedelta
 from src.theme import COMPOSES, ORDRE_COMPOSES
+from src.pedagogie import explication
 import plotly.express as px
 import pandas as pd
 from streamlit_extras.colored_header import colored_header
@@ -28,6 +29,11 @@ st.markdown(
 
 
 sidebar_hint_once()
+
+# Titre stylé conservé ci-dessus : l'accroche vient de la source unique.
+st.caption(explication("accueil")["accroche"])
+with st.popover("Comment lire cette page", icon=":material/help:"):
+    st.markdown(explication("accueil")["lecture"])
 
 # Les sélecteurs sont rendus par le routeur dans la barre latérale : on ne lit
 # ici que la session retenue, et on s'arrête si rien n'est encore chargé.
@@ -83,7 +89,7 @@ if not tours.empty and 'LapTime' in tours:
     top = pd.DataFrame(top).copy()
     top['LapTimeStr'] = top['LapTime'].apply(formatage_timedelta)
     top_display = top[['Driver','LapNumber','LapTimeStr','Compound','Stint']]
-    st.dataframe(top_display, use_container_width=True)
+    st.dataframe(top_display, width="stretch")
 else:
     st.info("Pas de données de tours.")
 
@@ -104,7 +110,7 @@ if 'Compound' in tours:
         color_discrete_map=COMPOSES,
         labels={'Tours': 'Tours', 'Driver': 'Pilote', 'Compound': 'Composé'},
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 else:
     st.info("Pas d'information pneus disponible.")
 
@@ -121,6 +127,6 @@ if not resultats.empty:
             except Exception:
                 pass
     st.markdown("Résultats officiels **(si disponibles)**")
-    st.dataframe(res, use_container_width=True)
+    st.dataframe(res, width="stretch")
 else:
     st.info("Résultats non disponibles pour cette session.")
