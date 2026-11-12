@@ -2,57 +2,28 @@
 name = "formula1"
 version = "0.1.0"
 description = "Statistiques interactives sur la Formule 1."
-# Aligné sur runtime.txt (python-3.11) et sur la matrice de CI.
-requires-python = ">=3.11"
-# Les versions exactes vivent dans requirements.txt, que lit Streamlit Cloud.
-# Ici on déclare les bornes basses. `sentry-sdk` y figurait sans être déclaré.
+requires-python = ">=3.10"
 dependencies = [
-    "streamlit>=1.50",
+    "streamlit",
     "fastf1>=3.8.3",
-    "pandas>=2.0",
-    "matplotlib>=3.9",
-    "plotly>=6.0",
-    "streamlit-extras>=0.7",
+    "pandas",
+    "matplotlib",
+    "plotly",
+    "streamlit-extras",
     "numpy>=2.0.2",
-    "sentry-sdk>=2.18",
-]
-
-[project.optional-dependencies]
-# Outillage de développement : `make install-dev` ou `pip install -e ".[dev]"`.
-# Les versions sont épinglées comme en CI, pour qu'une release d'outil ne
-# puisse pas rougir le lint sans changement de code (déjà vécu avec ruff).
-dev = [
-    "pytest==8.3.4",
-    "pytest-cov==6.0.0",
-    "ruff==0.15.22",
-    "pre-commit>=4.0",
 ]
 
 [tool.ruff]
 target-version = "py310"
 
-[tool.ruff.lint]
-# Jeu de règles **explicite**. Sans ce select, ruff applique ses défauts, qui
-# varient d'une version à l'autre : la CI (ruff non épinglé) signalait I001
-# alors que `ruff check .` passait en local. Déclarer les règles rend les deux
-# environnements identiques quelle que soit la version.
-# E4/E7/E9 + F sont les défauts de ruff ; I (tri des imports) est ajouté
-# explicitement parce que la CI le signalait déjà alors que `ruff check .`
-# passait en local. E501 (longueur de ligne) est volontairement **exclu** :
-# l'activer produirait des centaines d'erreurs sur du code existant, et une CI
-# rouge gèle le redéploiement. À traiter séparément, par vagues.
-select = ["E4", "E7", "E9", "F", "I"]
-
 [tool.ruff.lint.per-file-ignores]
-# src/data.py doit poser le backend matplotlib ("Agg") avant d'importer pyplot :
-# l'import suit donc un appel de code, ce que E402 interdit par défaut.
-"src/data.py" = ["E402"]
+# Streamlit impose que st.set_page_config() soit la première commande st.*
+# exécutée : certains imports doivent donc suivre l'appel de configuration.
+"Home.py" = ["E402"]
+"pages/*.py" = ["E402"]
 
 [tool.pytest.ini_options]
 # Ajoute la racine du repo au sys.path pour que `from src...` fonctionne
 # depuis tests/ sans dépendre du cwd.
 pythonpath = ["."]
 testpaths = ["tests"]
-markers = [
-    "reseau: nécessite un accès réseau à l'API OpenF1 (exclu par `make test`)",
-]

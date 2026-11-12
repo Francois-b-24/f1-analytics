@@ -1,7 +1,6 @@
-from datetime import datetime
-
-import pandas as pd
 import streamlit as st
+import pandas as pd
+from datetime import datetime
 from streamlit_extras.colored_header import colored_header
 
 from .openf1 import PREMIERE_SAISON
@@ -58,140 +57,75 @@ def _default_year() -> int:
     return max(current - 1, PREMIERE_SAISON)
 
 
-def _index_initial(cle: str, options: list, valeur) -> dict:
-    """Arguments d'index à passer à un selectbox, seulement au premier rendu.
-
-    Piège : un selectbox qui reçoit à la fois `key=` et un `index=` dérivé de
-    l'état validé boucle sur lui-même. Au rerun déclenché par « Charger »,
-    l'index est recalculé depuis l'**ancienne** valeur et écrase le choix que
-    l'utilisateur vient de faire — le widget revient en arrière et la
-    validation paraît sans effet.
-
-    Une fois le widget créé, `key=` assure seule la persistance : on ne fournit
-    donc `index` que tant que la clé est absente de `session_state`.
+def selecteurs_session():
     """
-    if cle in st.session_state:
-        return {}
-    try:
-        return {"index": options.index(valeur)}
-    except ValueError:
-        return {"index": 0}
+    Affiche les sélecteurs de session (année, Grand Prix, type) dans la sidebar.
 
-
-SESSION_LABELS = {
-    "FP1": "Essais libres 1",
-    "FP2": "Essais libres 2",
-    "FP3": "Essais libres 3",
-    "Q": "Qualifications",
-    "R": "Course",
-}
-
-
-@st.fragment
-def selecteurs_session_sidebar() -> None:
-    """Rend le sélecteur de session dans la barre latérale, sur toutes les pages.
-
-    Rendu par le routeur (`streamlit_app.py`), donc disponible partout : avant,
-    les sélecteurs n'existaient que sur l'accueil et changer de Grand Prix
-    depuis une page imposait d'y retourner.
-
-    Le bouton « Charger » est conservé **à dessein** plutôt qu'un chargement
-    automatique au changement de sélection. Deux raisons :
-
-    - le cache de session est plafonné à 2 entrées pour tenir dans la limite
-      mémoire de Streamlit Cloud ; parcourir trois saisons en auto-chargement
-      déclencherait trois chargements réseau dont deux aussitôt évincés ;
-    - changer de saison invalide le Grand Prix sélectionné, et un chargement
-      automatique partirait sur un couple (saison, GP) incohérent.
-
-    Le fragment évite que changer de saison — qui recharge le calendrier — ne
-    relance le rendu de la page entière. Aucun `st.stop()` ici : dans un
-    fragment, il n'arrêterait que le fragment.
-
-    À appeler **dans** un `with st.sidebar:` : Streamlit interdit à un fragment
-    d'ouvrir lui-même la barre latérale.
+    Retour
+    ------
+    tuple
+        (année, grand_prix, session_type, loaded)
     """
-    st.markdown("### Session")
+    default_year = _default_year()
+    annee_def = st.session_state.get("annee", default_year)
 
-    annee_def = st.session_state.get("annee", _default_year())
     events_def = _get_event_schedule(annee_def)
     last_event = _last_completed_event(annee_def) or (events_def[0] if events_def else "")
     grand_prix_def = st.session_state.get("grand_prix", last_event)
     session_type_def = st.session_state.get("session_type", "R")
 
-    # OpenF1 ne couvre pas les saisons antérieures à 2023.
+    # OpenF1, la source de données, ne couvre pas les saisons antérieures à 2023.
     annees = list(range(PREMIERE_SAISON, datetime.now().year + 1))[::-1]
     annee = st.selectbox(
         "Saison", annees,
+        index=annees.index(annee_def) if annee_def in annees else 0,
         key="sb_annee",
-        **_index_initial("sb_annee", annees, annee_def),
     )
-
     events = _get_event_schedule(annee)
     if not events:
-        st.warning(
-            f"Calendrier {annee} indisponible "
-            "(problème réseau ou saison non publiée)."
-        )
+        st.warning(f"Calendrier {annee} indisponible (problème réseau ou saison non publiée).")
     grand_prix_options = events if events else ["—"]
     grand_prix = st.selectbox(
         "Grand Prix",
         options=grand_prix_options,
+        index=grand_prix_options.index(grand_prix_def) if grand_prix_def in grand_prix_options else 0,
         key="sb_gp",
-        **_index_initial("sb_gp", grand_prix_options, grand_prix_def),
     )
-
-    libelles = list(SESSION_LABELS.values())
+    session_labels = {
+        "FP1": "Essais libres 1",
+        "FP2": "Essais libres 2",
+        "FP3": "Essais libres 3",
+        "Q": "Qualifications",
+        "R": "Course",
+    }
     session_display = st.selectbox(
         "Type de session",
-        libelles,
-        key="sb_type",
-        **_index_initial("sb_type", libelles, SESSION_LABELS.get(session_type_def)),
+        list(session_labels.values()),
+        index=list(session_labels.keys()).index(session_type_def) if session_type_def in session_labels else 4,
+        key="sb_type"
     )
-    session_type = [k for k, v in SESSION_LABELS.items() if v == session_display][0]
+    session_type = [k for k, v in session_labels.items() if v == session_display][0]
 
-    # La sélection des widgets peut différer de la session réellement
-    # chargée : le signaler évite de croire qu'on regarde un autre GP.
-    charge = st.session_state.get("loaded", False)
-    modifiee = charge and (
-        annee != st.session_state.get("annee")
-        or grand_prix != st.session_state.get("grand_prix")
-        or session_type != st.session_state.get("session_type")
-    )
-
-    if modifiee:
-        st.badge("Sélection modifiée", color="orange")
-
-    col_charger, col_reset = st.columns(2)
-    with col_charger:
-        if st.button(
-            "Charger",
-            key="btn_charger_session",
-            type="primary" if (modifiee or not charge) else "secondary",
-            width="stretch",
-        ):
+    col_load, col_reset = st.columns(2)
+    with col_load:
+        if st.button("Charger", key="load_btn_home"):
             st.session_state["annee"] = annee
             st.session_state["grand_prix"] = grand_prix
             st.session_state["session_type"] = session_type
             st.session_state["loaded"] = True
-            # `scope="app"` est indispensable : par défaut, un `st.rerun()`
-            # appelé dans un fragment ne relance que le fragment, et la page
-            # continuerait d'afficher la session précédente.
-            st.rerun(scope="app")
 
     with col_reset:
-        if st.button("Réinitialiser", key="btn_reset_session", width="stretch"):
-            for cle in ("annee", "grand_prix", "session_type", "loaded"):
-                st.session_state.pop(cle, None)
-            st.rerun(scope="app")
+        if st.button("Réinitialiser", key="reset_btn_home"):
+            for key in ["annee", "grand_prix", "session_type", "loaded"]:
+                if key in st.session_state:
+                    del st.session_state[key]
 
-    if charge and not modifiee:
-        st.caption(
-            f"Session active : **{st.session_state['annee']}** · "
-            f"{st.session_state['grand_prix']} · "
-            f"{SESSION_LABELS.get(st.session_state['session_type'], '?')}"
-        )
-
+    return (
+        st.session_state.get("annee", annee),
+        st.session_state.get("grand_prix", grand_prix),
+        st.session_state.get("session_type", session_type),
+        st.session_state.get("loaded", False),
+    )
 
 def selecteur_pilote_unique(pilotes: list[str]) -> str:
     """
@@ -276,84 +210,42 @@ def selections_courantes(required: bool = True):
     loaded = st.session_state.get("loaded", False)
 
     if required and (annee is None or grand_prix is None or session_type is None or not loaded):
-        # Les sélecteurs sont dans la barre latérale, sur cette page : plus
-        # besoin de renvoyer l'utilisateur vers l'accueil.
-        st.info(
-            "👈 Choisissez une saison, un Grand Prix et un type de session "
-            "dans la barre latérale, puis cliquez sur **Charger**."
-        )
+        st.info("Veuillez d’abord sélectionner et **charger** une session sur la page **Home**.")
+        st.page_link("Home.py", label="🏠 Aller à la page Home")
         st.stop()
 
     return annee, grand_prix, session_type, loaded
 
 def sidebar_hint_once():
-    """Pitch de l'app, masquable — affiché sur l'accueil uniquement."""
-    if st.session_state.get("sidebar_hint_ack"):
-        return
-    st.caption(
-        "Explorez les données d'un week-end de Grand Prix : tours, télémétrie, "
-        "pneus, arrêts, météo ✨"
-    )
-    st.caption("👈 Les pages sont regroupées par thème dans la barre latérale.")
-    st.button(
-        "Masquer ce message",
-        on_click=lambda: st.session_state.update(sidebar_hint_ack=True),
-    )
+    if "sidebar_hint_ack" not in st.session_state:
+        st.session_state["sidebar_hint_ack"] = False
+    if not st.session_state["sidebar_hint_ack"]:
+        st.caption("Explorez interactivement les données d'un week-end de Grand Prix (tours, télémétrie, pneus, arrêts, météo) ✨")
+        st.caption("👈 Astuce : tous les pages sont dans la barre latérale à gauche.")
+        st.button("Masquer ce message", on_click=lambda: st.session_state.update(sidebar_hint_ack=True))
 
-def afficher_figure(fig) -> None:
-    """Affiche une figure matplotlib puis la libère.
+def sidebar_debug_switch():
+    """Ajoute un switch dans la sidebar pour activer le mode debug global."""
+    with st.sidebar:
+        st.session_state['debug_mode'] = st.checkbox('🐞 Mode debug (infos techniques)', value=st.session_state.get('debug_mode', False))
 
-    `st.pyplot` ne ferme pas la figure : sans `plt.close`, chaque rerun en
-    accumule une de plus dans le gestionnaire global de matplotlib. Sous le
-    plafond mémoire de Streamlit Cloud (~1 Go), les pages à cartes de circuit
-    finissaient par faire tuer le processus.
-    """
-    import matplotlib.pyplot as plt
+def debug_expander(msg, details):
+    """Affiche un expander avec un message et des infos debug si le mode debug est actif."""
+    if st.session_state.get('debug_mode', False):
+        with st.expander(msg):
+            st.write(details)
 
-    st.pyplot(fig, width="stretch")
-    plt.close(fig)
-
-
-def entete_page(page: str) -> None:
-    """En-tête homogène : titre, accroche, et « Comment lire » si disponible.
-
-    Volontairement limité à l'en-tête. Le corps de chaque page reste du
-    Streamlit direct : une abstraction qui engloberait tout le rendu
-    rendrait les pages illisibles pour un gain cosmétique.
-
-    `page` est le nom du module (sans .py), clé de `src.pedagogie.EXPLICATIONS`.
-    """
-    from .pedagogie import explication
-
-    textes = explication(page)
-    st.title(textes["titre"])
-
-    if textes.get("accroche"):
-        st.caption(textes["accroche"])
-
-    if textes.get("lecture"):
-        with st.popover("Comment lire cette page", icon=":material/help:"):
-            st.markdown(textes["lecture"])
-
-
-# Termes montrés en raccourci dans la barre latérale. Constante plutôt que
-# littéral enfoui : un test vérifie qu'ils existent bien dans le glossaire.
-TERMES_RACCOURCI = (
-    "Relais (stint)", "Composé", "Dégradation", "Delta", "Secteur", "Undercut",
-)
-
-
-def glossaire_sidebar() -> None:
-    """Accès au glossaire depuis la barre latérale, donc depuis chaque page.
-
-    Un popover plutôt qu'un expander : fermé, il n'occupe qu'une ligne et ne
-    repousse pas les sélecteurs de session vers le bas.
-    """
-    from .navigation import page_glossaire
-    from .pedagogie import GLOSSAIRE
-
-    with st.popover("Glossaire F1", icon=":material/menu_book:", width="stretch"):
-        st.caption("Les termes les plus courants — la page complète en liste davantage.")
-        for terme in TERMES_RACCOURCI:
-            st.markdown(f"**{terme}** — {GLOSSAIRE[terme]}")
-        st.page_link(page_glossaire(), label="Voir tout le glossaire")
+def context_sidebar_only():
+    """Résumé session chargée sans aucune interaction ni selectbox."""
+    with st.sidebar:
+        st.markdown("""
+        <div style='font-size:1.1em;font-weight:bold;margin-bottom:0.5em;'>📋 <u>Session courante :</u></div>""", unsafe_allow_html=True)
+        annee = st.session_state.get("annee")
+        grand_prix = st.session_state.get("grand_prix")
+        session_type = st.session_state.get("session_type")
+        loaded = st.session_state.get("loaded")
+        if loaded and annee and grand_prix and session_type:
+            st.markdown(f"""
+            <div style='font-size:0.98em;'><b>🎯 Session:</b> {annee} – {grand_prix} [{session_type}]</div>""", unsafe_allow_html=True)
+        else:
+            st.error("Aucune session chargée. Revenez à la page Home.")

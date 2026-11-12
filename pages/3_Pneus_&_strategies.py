@@ -1,22 +1,28 @@
+import streamlit as st
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-import streamlit as st
 
+from src.config import configure_page
+from src.ui import selections_courantes
+from src.data import chargement_session
 from src.analytics import (
     stint_degradation,
     stint_degradation_fits,
     tyre_degradation_matrix,
 )
-from src.session import charger_session_ou_stopper
-from src.ui import entete_page, selections_courantes
 
-entete_page("pneus_strategies")
+configure_page("F1 Analytics – Pneus & Stratégie")
+
+st.subheader("Pneus & Stratégie")
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 
+if not loaded:
+    st.info("Charge d’abord une session depuis la page Home.")
+    st.stop()
 
-data = charger_session_ou_stopper(annee, grand_prix, session_type)
+data = chargement_session(annee, grand_prix, session_type)
 tours = data["tours"]
 pilotes = data["pilotes"]
 
@@ -32,7 +38,7 @@ if {'Stint', 'Compound', 'LapNumber'}.issubset(tours.columns):
              Compound=('Compound', 'last'))
         .reset_index()
     )
-    st.dataframe(stint_ranges, width="stretch")
+    st.dataframe(stint_ranges, use_container_width=True)
 
     st.subheader("Performance moyenne par stint (temps moyen)")
     perf = (
@@ -46,7 +52,7 @@ if {'Stint', 'Compound', 'LapNumber'}.issubset(tours.columns):
         barmode='group', facet_row='Stint',
         labels={'AvgLapSec': 'Temps moyen (s)'},
     )
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Les informations de stints/pneus ne sont pas disponibles pour cette session.")
     st.stop()
@@ -107,7 +113,7 @@ if selected_drivers:
                 row="all", col="all",
             )
         fig_deg.update_yaxes(matches=None)
-        st.plotly_chart(fig_deg, width="stretch")
+        st.plotly_chart(fig_deg, use_container_width=True)
 
         if not fits.empty:
             st.markdown("**Estimations par stint**")
@@ -116,7 +122,7 @@ if selected_drivers:
             display["Intercept"] = display["Intercept"].round(3)
             display["R2"] = display["R2"].round(3)
             display = display.rename(columns={"Slope": "Slope (s/tour)", "Intercept": "Base (s)"})
-            st.dataframe(display, width="stretch")
+            st.dataframe(display, use_container_width=True)
 
 # ---------------------------------------------------------------------------
 # F4 — Heatmap de dégradation (Driver × LapNumber → Δ au PB personnel)
@@ -141,4 +147,4 @@ else:
         labels=dict(x="Numéro de tour", y="Pilote", color="Δ vs PB (s)"),
     )
     fig_hm.update_layout(height=max(380, 22 * len(mat.index) + 120))
-    st.plotly_chart(fig_hm, width="stretch")
+    st.plotly_chart(fig_hm, use_container_width=True)

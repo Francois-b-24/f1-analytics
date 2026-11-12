@@ -1,20 +1,27 @@
-import plotly.express as px
 import streamlit as st
+import plotly.express as px
+
+from src.config import configure_page
+from src.ui import selections_courantes
+from src.data import chargement_session
+from src.analytics import sector_times_long, sector_best_per_driver
 from streamlit_extras.colored_header import colored_header
 
-from src.analytics import sector_best_per_driver, sector_times_long
-from src.session import charger_session_ou_stopper
-from src.ui import entete_page, selections_courantes
 
-entete_page("secteurs")
+configure_page("F1 Analytics – Analyse par secteur")
+
+st.subheader("Analyse par secteur")
 st.caption(
     "Décomposition des temps au tour en 3 secteurs. Permet d'identifier "
     "dans quelle portion du circuit un pilote gagne ou perd du temps."
 )
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
+if not loaded:
+    st.info("Charge d’abord une session depuis la page Home.")
+    st.stop()
 
-data = charger_session_ou_stopper(annee, grand_prix, session_type)
+data = chargement_session(annee, grand_prix, session_type)
 tours = data["tours"]
 pilotes = data["pilotes"]
 
@@ -49,7 +56,7 @@ else:
     for c in ("DeltaS1", "DeltaS2", "DeltaS3", "DeltaTotal"):
         if c in display.columns:
             display[c] = display[c].round(3)
-    st.dataframe(display, width="stretch")
+    st.dataframe(display, use_container_width=True)
 
 # ---------------------------------------------------------------------------
 # Distribution des temps par secteur (box-plot)
@@ -70,7 +77,7 @@ else:
     )
     fig_box.update_yaxes(matches=None, showticklabels=True)
     fig_box.update_layout(showlegend=False, height=450)
-    st.plotly_chart(fig_box, width="stretch")
+    st.plotly_chart(fig_box, use_container_width=True)
 
     # Évolution des temps de secteur par numéro de tour
     colored_header("Évolution des temps par secteur", description=None, color_name="blue-70")
@@ -84,4 +91,4 @@ else:
         height=700,
     )
     fig_evo.update_yaxes(matches=None)
-    st.plotly_chart(fig_evo, width="stretch")
+    st.plotly_chart(fig_evo, use_container_width=True)

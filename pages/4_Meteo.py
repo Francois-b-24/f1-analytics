@@ -1,34 +1,33 @@
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
+import plotly.express as px
 from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+from src.config import configure_page
+from src.ui import selections_courantes
+from src.data import chargement_session
 
-from src.session import charger_session_ou_stopper
-from src.ui import entete_page, selections_courantes
+configure_page("F1 Analytics – Météo")
 
-entete_page("meteo")
+st.subheader("Données météo de la session")
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 
+if not loaded:
+    st.info("Charge d’abord une session depuis la page Home")
+    st.stop()
 
-data = charger_session_ou_stopper(annee, grand_prix, session_type)
+data = chargement_session(annee, grand_prix, session_type)
 meteo = data["meteo"]
 
 if not meteo.empty:
+    st.dataframe(meteo, use_container_width=True)
     xcol = 'SessionTimeSec' if 'SessionTimeSec' in meteo else 'Time'
     # --- KPI : Écart moyen entre la température piste et air ---
     if 'AirTemp' in meteo and 'TrackTemp' in meteo:
         diff = meteo['TrackTemp'] - meteo['AirTemp']
         mean_diff = float(diff.mean(skipna=True))
-        if pd.notna(mean_diff):
-            st.metric(
-                "Écart moyen piste − air",
-                f"{mean_diff:.1f} °C",
-                help=("Une piste nettement plus chaude que l'air accélère la "
-                      "dégradation des pneus et pousse à s'arrêter plus tôt."),
-                border=True,
-            )
+        if not (mean_diff != mean_diff):  # NaN check
+            st.metric("Écart moyen piste - air", f"{mean_diff:.1f} °C")
 
     temp = ('AirTemp' in meteo) or ('TrackTemp' in meteo)
 
@@ -51,20 +50,21 @@ if not meteo.empty:
         fig_all.update_xaxes(title_text='Temps de session')
         fig_all.update_yaxes(title_text='Température (°C)', secondary_y=False)
 
-        st.plotly_chart(fig_all, width="stretch")
+        st.plotly_chart(fig_all, use_container_width=True)
 
-    # Air et piste sont déjà tracées ensemble au-dessus : les reprendre
-    # séparément n'ajoutait rien. Le vent, lui, est une donnée distincte.
+    if 'AirTemp' in meteo:
+        fig_t = px.line(meteo, x=xcol, y='AirTemp', labels={'AirTemp':'Température air (°C)'}, title="Température de l'air")
+        fig_t.update_xaxes(title_text="Temps de session")
+        st.plotly_chart(fig_t, use_container_width=True)
+    if 'TrackTemp' in meteo:
+        fig_tt = px.line(meteo, x=xcol, y='TrackTemp', labels={'TrackTemp':'Température piste (°C)'}, title="Température de la piste")
+        fig_tt.update_xaxes(title_text="Temps de session")
+        st.plotly_chart(fig_tt, use_container_width=True)
     if 'WindSpeed' in meteo:
-        fig_w = px.line(
-            meteo, x=xcol, y='WindSpeed',
-            labels={'WindSpeed': 'Vent (m/s)'}, title="Vitesse du vent",
-        )
+        fig_w = px.line(meteo, x=xcol, y='WindSpeed', labels={'WindSpeed':'Vent (m/s)'}, title="Vitesse du vent")
         fig_w.update_xaxes(title_text="Temps de session")
-        st.plotly_chart(fig_w, width="stretch")
+        st.plotly_chart(fig_w, use_container_width=True)
 
-    with st.expander("Données brutes"):
-        st.dataframe(meteo, hide_index=True, width="stretch")
 
 else:
     st.info("Météo indisponible pour cette session.")

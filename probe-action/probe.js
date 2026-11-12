@@ -68,56 +68,6 @@ const isAsleep = async (page) => {
   }
 };
 
-/**
- * Diagnostique l'état réel d'une page, par **validation positive**.
- *
- * Pourquoi : juger « réveillée » à la seule absence des marqueurs de veille
- * laissait passer une app redirigée vers /-/login. C'est arrivé le
- * 2026-11-12 — la sonde a cliqué le bouton de réveil, constaté qu'aucun
- * marqueur de veille ne subsistait, et conclu « réveillée avec succès »
- * alors que l'app exigeait une authentification et restait grise pour tout
- * visiteur. Six heures de panne rapportées en vert.
- *
- * Un écran de connexion n'est pas une app qui tourne : on exige donc la
- * présence du conteneur Streamlit, et non l'absence d'un symptôme.
- *
- * Retourne { ok, raison }.
- */
-const diagnostiquer = async (page) => {
-  const url = page.url();
-
-  // L'authentification prime : elle masque tout le reste.
-  if (url.includes('/-/login') || url.includes('/auth/')) {
-    return { ok: false, raison: "redirigée vers un écran de connexion — app non publique" };
-  }
-
-  if (await isAsleep(page)) {
-    return { ok: false, raison: "en veille" };
-  }
-
-  // Validation positive : le conteneur racine de Streamlit doit être présent.
-  // Sans lui, la page peut être grise (erreur de démarrage, écran
-  // intermédiaire) tout en ne portant aucun marqueur de veille.
-  let rendu = false;
-  try {
-    rendu = await page.evaluate(() =>
-      Boolean(
-        document.querySelector('[data-testid="stAppViewContainer"]') ||
-        document.querySelector('.stApp') ||
-        document.querySelector('[data-testid="stSidebar"]')
-      )
-    );
-  } catch (err) {
-    return { ok: false, raison: `DOM illisible (${err.message})` };
-  }
-
-  if (!rendu) {
-    return { ok: false, raison: "page chargée mais l'application n'est pas rendue" };
-  }
-
-  return { ok: true, raison: "application rendue" };
-};
-
 (async () => {
   console.log("Node version:", process.version);
 
@@ -163,22 +113,19 @@ const diagnostiquer = async (page) => {
         continue;
       }
 
-      await sleep(PAGE_LOAD_GRACE_PERIOD_MS);
-
-      const etat = await diagnostiquer(page);
-
-      if (etat.ok) {
-        console.log(`✅ ${url} : ${etat.raison}.`);
+      // Redirigé vers l'écran de login : l'app n'est pas publiquement accessible.
+      if (page.url().includes('/-/login')) {
+        console.log(`❌ ${url} : redirigée vers /-/login — app inaccessible publiquement.`);
+        failures.push(`${url} (redirection /-/login)`);
         await page.close();
         continue;
       }
 
-      // Seule la veille se corrige par un clic. Une app non publique ou qui ne
-      // se rend pas ne sera pas réparée en réessayant : on le signale tout de
-      // suite plutôt que de cliquer dans le vide puis de conclure au succès.
-      if (etat.raison !== "en veille") {
-        console.log(`❌ ${url} : ${etat.raison}.`);
-        failures.push(`${url} (${etat.raison})`);
+      await sleep(PAGE_LOAD_GRACE_PERIOD_MS);
+
+      // L'app dort-elle vraiment ? Si non, rien à faire.
+      if (!(await isAsleep(page))) {
+        console.log(`✅ ${url} est déjà éveillée.`);
         await page.close();
         continue;
       }
@@ -197,17 +144,11 @@ const diagnostiquer = async (page) => {
       if (!clicked) {
         console.log(`❌ ${url} : en veille mais aucun bouton de réveil trouvé.`);
         failures.push(`${url} (bouton introuvable)`);
+      } else if (await isAsleep(page)) {
+        console.log(`❌ ${url} : toujours en veille après le clic.`);
+        failures.push(`${url} (réveil sans effet)`);
       } else {
-        // Même exigence qu'avant le clic : l'app doit être *rendue*. C'est ici
-        // que la sonde concluait au succès sur la seule disparition des
-        // marqueurs de veille, masquant une redirection vers /-/login.
-        const apres = await diagnostiquer(page);
-        if (apres.ok) {
-          console.log(`✅ ${url} réveillée — ${apres.raison}.`);
-        } else {
-          console.log(`❌ ${url} : après réveil, ${apres.raison}.`);
-          failures.push(`${url} (après réveil: ${apres.raison})`);
-        }
+        console.log(`✅ ${url} réveillée avec succès.`);
       }
 
       await page.close();

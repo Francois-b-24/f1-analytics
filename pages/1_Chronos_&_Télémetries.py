@@ -1,22 +1,30 @@
+import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
-import streamlit as st
+
+from src.config import configure_page
+from src.ui import selecteurs_pilotes, selections_courantes
+from src.data import chargement_session, tour_rapide_tel
+from src.utils import formatage_timedelta
+from src.analytics import delta_time_vs_distance
+
 from streamlit_extras.colored_header import colored_header
 
-from src.analytics import delta_time_vs_distance
-from src.data import tour_rapide_tel
-from src.session import charger_session_ou_stopper
-from src.ui import entete_page, selecteurs_pilotes, selections_courantes
-from src.utils import formatage_timedelta
 
-entete_page("chronos_telemetries")
+configure_page("F1 Analytics – Tours & Chronos")
+
+st.subheader("Tours & Chronos")
 st.caption("Comparaison des performances entre 2 pilotes possible.")
 
 # 1) Récupérer les sélections faites sur Home
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
+if not loaded:
+    st.warning("Aucune session n'est chargée. Retournez à l'accueil.")
+    st.page_link("Home.py", label="🏠 Retour à la Home")
+    st.stop()
 
 # 2) Charger les données une seule fois (cache côté src.data)
-data = charger_session_ou_stopper(annee, grand_prix, session_type)
+data = chargement_session(annee, grand_prix, session_type)
 tours = data["tours"]
 pilotes = data["pilotes"]
 
@@ -30,7 +38,7 @@ colored_header("Évolution des temps au tour (en secondes)", description=None, c
 if not subset.empty and subset['LapSeconds'].notna().any():
     fig = px.line(subset, x='LapNumber', y='LapSeconds', color='Driver', labels={'LapSeconds': 'Temps (s)'})
     fig.update_xaxes(title_text="Tours")
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Données de tours insuffisantes.")
 
@@ -81,7 +89,7 @@ else:
                 fig.add_scatter(x=tel_2['Distance'], y=tel_2['Speed'], mode='lines', name=pilote_2)
             else:
                 st.caption(f"Télémétrie non disponible pour {pilote_2}.")
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
 
         if pilote_2 and d2_fast:
             c1, c2, c3 = st.columns(3)
@@ -124,7 +132,7 @@ else:
                     yaxis_title=f"Δ temps (s) — négatif = {pilote_2} devant",
                     hovermode="x unified",
                 )
-                st.plotly_chart(fig_delta, width="stretch")
+                st.plotly_chart(fig_delta, use_container_width=True)
                 final_delta = float(delta_df["Delta"].iloc[-1])
                 st.caption(
                     f"Écart final : **{final_delta:+.3f} s** "
@@ -145,7 +153,7 @@ table = subset[[c for c in colonnes if c in subset.columns]].copy()
 if 'LapTime' in table:
     table['LapTime'] = table['LapTime'].apply(formatage_timedelta)
 if not table.empty:
-    st.dataframe(table, width="stretch")
+    st.dataframe(table, use_container_width=True)
     st.download_button(
         "Télécharger CSV",
         data=table.to_csv(index=False).encode('utf-8'),

@@ -3,15 +3,15 @@ import pandas as pd
 import pytest
 
 from src.analytics import (
-    comparaison_proxys_energie,
-    delta_time_vs_distance,
-    phases_telemetrie,
-    resume_proxys_energie,
-    sector_best_per_driver,
     sector_times_long,
+    sector_best_per_driver,
     stint_degradation,
     stint_degradation_fits,
+    delta_time_vs_distance,
     tyre_degradation_matrix,
+    phases_telemetrie,
+    resume_proxys_energie,
+    comparaison_proxys_energie,
 )
 
 

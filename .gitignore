@@ -32,12 +32,3 @@ cache/
 # Build artefacts
 dist/
 build/
-
-.coverage
-.coverage.*
-htmlcov/
-
-# Variables d'environnement locales (.env.example est le modèle, versionné).
-.env
-.env.*
-!.env.example
