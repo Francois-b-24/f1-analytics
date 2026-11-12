@@ -33,6 +33,6 @@ if 'PitInTime' in tours or 'PitOutTime' in tours or 'PitStop' in tours:
     for c in ['PitInTime', 'PitOutTime']:
         if c in pits:
             pits[c] = pits[c].apply(formatage_timedelta)
-    st.dataframe(pits, width="stretch")
+    st.dataframe(pits, use_container_width=True)
 else:
     st.info("Aucune donnée d'arrêt aux stands disponible.")

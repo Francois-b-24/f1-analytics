@@ -56,7 +56,7 @@ else:
     for c in ("DeltaS1", "DeltaS2", "DeltaS3", "DeltaTotal"):
         if c in display.columns:
             display[c] = display[c].round(3)
-    st.dataframe(display, width="stretch")
+    st.dataframe(display, use_container_width=True)
 
 # ---------------------------------------------------------------------------
 # Distribution des temps par secteur (box-plot)
@@ -77,7 +77,7 @@ else:
     )
     fig_box.update_yaxes(matches=None, showticklabels=True)
     fig_box.update_layout(showlegend=False, height=450)
-    st.plotly_chart(fig_box)
+    st.plotly_chart(fig_box, use_container_width=True)
 
     # Évolution des temps de secteur par numéro de tour
     colored_header("Évolution des temps par secteur", description=None, color_name="blue-70")
@@ -91,4 +91,4 @@ else:
         height=700,
     )
     fig_evo.update_yaxes(matches=None)
-    st.plotly_chart(fig_evo)
+    st.plotly_chart(fig_evo, use_container_width=True)

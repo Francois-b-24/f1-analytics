@@ -249,18 +249,3 @@ def context_sidebar_only():
             <div style='font-size:0.98em;'><b>🎯 Session:</b> {annee} – {grand_prix} [{session_type}]</div>""", unsafe_allow_html=True)
         else:
             st.error("Aucune session chargée. Revenez à la page Home.")
-
-def afficher_figure(fig) -> None:
-    """Affiche une figure matplotlib puis la libère.
-
-    `st.pyplot` ne ferme pas la figure qu'on lui passe : elle reste dans le
-    gestionnaire global de matplotlib. Mesuré sur la page Performances,
-    8 visites laissaient 8 figures ouvertes et +23 Mo non rendus. Sous le
-    plafond mémoire de Streamlit Cloud (~1 Go), le processus finit par être
-    tué sans trace dans les logs — la page semble alors simplement ne plus
-    fonctionner.
-    """
-    import matplotlib.pyplot as plt
-
-    st.pyplot(fig, width="stretch")
-    plt.close(fig)

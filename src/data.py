@@ -535,12 +535,7 @@ def figure_positions_par_tour(tours: pd.DataFrame, pilotes=None):
     if not pilotes:
         return _err_figure("Aucun pilote détecté dans les tours", figsize=(10, 5))
 
-    # `layout="constrained"` plutôt qu'un `tight_layout()` en fin de fonction :
-    # avec le backend Agg et une légende placée hors des axes, tight_layout
-    # retient de la mémoire même après `plt.close(fig)` — mesuré à +30 Mo sur
-    # 30 figures, contre +6 Mo ici. C'est cette fuite qui faisait tuer le
-    # processus après quelques visites de la page Performances.
-    fig, ax = plt.subplots(figsize=(10, 5), layout="constrained")
+    fig, ax = plt.subplots(figsize=(10, 5))
     fig.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
     ax.tick_params(colors=INK_PRIMARY)
@@ -596,6 +591,7 @@ def figure_positions_par_tour(tours: pd.DataFrame, pilotes=None):
     )
     if leg is not None:
         leg.get_title().set_color(INK_PRIMARY)
+    plt.tight_layout()
 
     return fig
 
@@ -715,9 +711,7 @@ def figure_carte_rapports(tel: pd.DataFrame,
     ax.axis('off')
 
     if show_colorbar:
-        # `fig.colorbar` et non `plt.colorbar` : la variante pyplot cible la
-        # figure *courante* du gestionnaire global, pas celle qu'on construit.
-        cbar = fig.colorbar(mappable=lc, ax=ax, boundaries=np.arange(1, 10), fraction=0.046, pad=0.04)
+        cbar = plt.colorbar(mappable=lc, ax=ax, boundaries=np.arange(1, 10), fraction=0.046, pad=0.04)
         cbar.set_ticks(np.arange(1.5, 9.5))
         cbar.set_ticklabels(np.arange(1, 9))
         cbar.set_label("Rapport", color=INK_PRIMARY)

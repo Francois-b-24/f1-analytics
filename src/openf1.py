@@ -17,7 +17,6 @@ from __future__ import annotations
 import json
 import logging
 import random
-import threading
 import time
 import urllib.error
 import urllib.parse
@@ -38,58 +37,6 @@ _ATTENTE_ENTRE_TENTATIVES = 1.5
 # observé). Le plafond évite qu'un quota mal annoncé ne fige l'application.
 _ATTENTE_QUOTA_DEFAUT = 5.0
 _ATTENTE_QUOTA_MAX = 20.0
-
-# Espacement minimal entre deux départs de requête vers OpenF1.
-#
-# L'API plafonne le débit : mesuré en novembre 2026, elle répond 429 après
-# 6 requêtes en 0,72 s. Sans espacement, les threads parallèles partent
-# ensemble, déclenchent le quota, et chaque dépassement coûte de 5 à 20 s
-# d'attente — la dette s'accumule d'un chargement au suivant.
-#
-# Valeur calibrée par mesure (7 endpoints d'une session, 3 essais consécutifs,
-# cache neutralisé) :
-#
-#   sans espacement   22,1 / 1,9 / 2,0 s   → pic à 22 s, c'est lui qui fait
-#                                            tomber l'application
-#   0,05 s             1,8 / 1,7 / 1,8 s   ← retenu : le plus rapide ET stable
-#   0,10 s             3,3 / 1,8 / 3,2 s
-#   0,15 s             2,2 / 2,1 / 3,1 s
-#
-# Contre-intuitif mais vérifié : au-delà de 0,05 s, l'espacement coûte plus
-# qu'il n'évite de pénalités. Ne pas augmenter cette valeur « par prudence »
-# sans refaire la mesure.
-_INTERVALLE_MIN_REQUETES = 0.05
-
-_verrou_debit = threading.Lock()
-_dernier_depart = 0.0
-
-
-def _attendre_son_tour() -> None:
-    """Espace les départs de requêtes d'au moins `_INTERVALLE_MIN_REQUETES`.
-
-    Sérialise l'instant de départ sans sérialiser l'attente réseau : les
-    threads parallèles gardent leur intérêt, ils ne partent simplement pas
-    tous au même instant.
-    """
-    global _dernier_depart
-    with _verrou_debit:
-        attente = _INTERVALLE_MIN_REQUETES - (time.monotonic() - _dernier_depart)
-        _dernier_depart = time.monotonic()
-    # Hors du verrou : un thread qui patiente ne doit pas bloquer les autres
-    # dans le calcul de leur propre tour.
-    if attente > 0:
-        time.sleep(attente)
-
-
-def reinitialiser_debit() -> None:
-    """Oublie le dernier départ enregistré.
-
-    Utile aux tests : `_dernier_depart` est un état de module, donc un test
-    qui émet une requête décalerait la temporisation du suivant.
-    """
-    global _dernier_depart
-    _dernier_depart = 0.0
-
 
 # Nombre de requêtes menées en parallèle (télémétrie, métadonnées).
 # Mesuré sur une grille complète : le facteur limitant est le temps de réponse
@@ -131,7 +78,6 @@ def _get(endpoint: str, **params) -> list[dict]:
     derniere: Exception | None = None
 
     for tentative in range(1, _TENTATIVES + 1):
-        _attendre_son_tour()
         try:
             requete = urllib.request.Request(
                 url, headers={"User-Agent": "f1-analytics", "Accept": "application/json"}

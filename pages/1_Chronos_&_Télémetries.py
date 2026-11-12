@@ -38,7 +38,7 @@ colored_header("Évolution des temps au tour (en secondes)", description=None, c
 if not subset.empty and subset['LapSeconds'].notna().any():
     fig = px.line(subset, x='LapNumber', y='LapSeconds', color='Driver', labels={'LapSeconds': 'Temps (s)'})
     fig.update_xaxes(title_text="Tours")
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Données de tours insuffisantes.")
 
@@ -89,7 +89,7 @@ else:
                 fig.add_scatter(x=tel_2['Distance'], y=tel_2['Speed'], mode='lines', name=pilote_2)
             else:
                 st.caption(f"Télémétrie non disponible pour {pilote_2}.")
-        st.plotly_chart(fig)
+        st.plotly_chart(fig, use_container_width=True)
 
         if pilote_2 and d2_fast:
             c1, c2, c3 = st.columns(3)
@@ -132,7 +132,7 @@ else:
                     yaxis_title=f"Δ temps (s) — négatif = {pilote_2} devant",
                     hovermode="x unified",
                 )
-                st.plotly_chart(fig_delta)
+                st.plotly_chart(fig_delta, use_container_width=True)
                 final_delta = float(delta_df["Delta"].iloc[-1])
                 st.caption(
                     f"Écart final : **{final_delta:+.3f} s** "
@@ -153,7 +153,7 @@ table = subset[[c for c in colonnes if c in subset.columns]].copy()
 if 'LapTime' in table:
     table['LapTime'] = table['LapTime'].apply(formatage_timedelta)
 if not table.empty:
-    st.dataframe(table, width="stretch")
+    st.dataframe(table, use_container_width=True)
     st.download_button(
         "Télécharger CSV",
         data=table.to_csv(index=False).encode('utf-8'),
