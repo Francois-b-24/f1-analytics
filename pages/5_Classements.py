@@ -1,8 +1,8 @@
 import streamlit as st
 from src.config import configure_page
 from src.ui import selections_courantes
+from src.session import charger_session_ou_stopper
 from src.data import (
-    chargement_session,
     classement_session,
     calcul_classement_pilote,
     calcul_classement_constructeur,
@@ -14,11 +14,8 @@ t1, t2 = st.tabs(["Classement session", "Championnat"])
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 
-if not loaded:
-    st.info("Charge d’abord une session depuis la page Home")
-    st.stop()
 
-data = chargement_session(annee, grand_prix, session_type)
+data = charger_session_ou_stopper(annee, grand_prix, session_type)
 tours = data["tours"]
 resultats = data["resultats"]
 

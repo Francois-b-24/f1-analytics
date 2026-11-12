@@ -1,7 +1,7 @@
 import streamlit as st
 from src.config import configure_page_home
 from src.ui import selecteurs_session, sidebar_hint_once
-from src.data import chargement_session
+from src.session import charger_session_ou_stopper
 from src.utils import formatage_timedelta
 from src.theme import COMPOSES, ORDRE_COMPOSES
 import plotly.express as px
@@ -39,39 +39,13 @@ if not loaded:
     st.info("Sélectionnez une année, un Grand Prix et un type de session, puis **Charger**")
     st.stop()
 
-# Chargement du WEEK-END de Grand prix
-import logging
-_logger = logging.getLogger("f1_analytics.home")
-
-try:
-    _data = chargement_session(annee, grand_prix, session_type)
-    session = session_type
-    nom_gp = grand_prix
-    tours = _data['tours']
-    pilotes = _data['pilotes']
-    meteo = _data['meteo']
-    resultats = _data['resultats']
-except Exception as e:
-    _logger.exception("Échec chargement session %s / %s / %s", annee, grand_prix, session_type)
-    err_type = type(e).__name__
-    msg = str(e) or "(pas de message)"
-
-    if "404" in msg or "not found" in msg.lower() or "no data" in msg.lower():
-        st.error(f"❌ Session indisponible : {annee} – {grand_prix} ({session_type}). Cette session n'a pas encore eu lieu ou n'est pas publiée.")
-    elif "connection" in msg.lower() or "timeout" in msg.lower() or err_type in ("ConnectionError", "Timeout"):
-        st.error("🔌 Problème de connexion à l'API F1. Réessaie dans quelques instants.")
-    else:
-        st.error(f"⚠️ Impossible de charger cette session : **{err_type}** — {msg}")
-
-    col_a, col_b = st.columns([1, 4])
-    with col_a:
-        if st.button("🔄 Réessayer", key="retry_load"):
-            chargement_session.clear()
-            st.rerun()
-    with st.expander("Détails techniques"):
-        import traceback
-        st.code(f"{err_type}: {msg}\n\n{traceback.format_exc()}")
-    st.stop()
+_data = charger_session_ou_stopper(annee, grand_prix, session_type)
+session = session_type
+nom_gp = grand_prix
+tours = _data['tours']
+pilotes = _data['pilotes']
+meteo = _data['meteo']
+resultats = _data['resultats']
 
 
 # Les métriques utilisent maintenant le thème CSS adaptatif

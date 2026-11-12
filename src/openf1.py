@@ -51,6 +51,22 @@ class OpenF1Error(RuntimeError):
     """Erreur d'accès à l'API OpenF1 (réseau, HTTP ou réponse illisible)."""
 
 
+class OpenF1Indisponible(OpenF1Error):
+    """L'API n'a pas pu être joignée : réseau, timeout, quota ou 5xx.
+
+    Distinguée de `OpenF1SansDonnees` car l'action utilisateur diffère : ici
+    réessayer a du sens, l'API est momentanément hors d'atteinte.
+    """
+
+
+class OpenF1SansDonnees(OpenF1Error):
+    """L'API a répondu, mais la session demandée n'a aucune donnée publiée.
+
+    Réessayer est inutile : soit la session n'a pas eu lieu, soit ses données
+    ne sont pas encore publiées (délai de quelques heures après la séance).
+    """
+
+
 def _construire_url(endpoint: str, params: dict) -> str:
     """Assemble l'URL. Les opérateurs de comparaison sont préservés.
 
@@ -87,7 +103,7 @@ def _get(endpoint: str, **params) -> list[dict]:
             donnees = json.loads(charge)
             if isinstance(donnees, dict):
                 # OpenF1 renvoie un objet (et non une liste) pour signaler une erreur.
-                raise OpenF1Error(f"Réponse inattendue de {endpoint}: {donnees}")
+                raise OpenF1Indisponible(f"Réponse inattendue de {endpoint}: {donnees}")
             return donnees
 
         except urllib.error.HTTPError as exc:
@@ -127,7 +143,7 @@ def _get(endpoint: str, **params) -> list[dict]:
             )
             time.sleep(_ATTENTE_ENTRE_TENTATIVES * tentative)
 
-    raise OpenF1Error(
+    raise OpenF1Indisponible(
         f"Impossible de joindre OpenF1 ({endpoint}): "
         f"{type(derniere).__name__}: {derniere}"
     ) from derniere

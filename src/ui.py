@@ -224,28 +224,15 @@ def sidebar_hint_once():
         st.caption("👈 Astuce : tous les pages sont dans la barre latérale à gauche.")
         st.button("Masquer ce message", on_click=lambda: st.session_state.update(sidebar_hint_ack=True))
 
-def sidebar_debug_switch():
-    """Ajoute un switch dans la sidebar pour activer le mode debug global."""
-    with st.sidebar:
-        st.session_state['debug_mode'] = st.checkbox('🐞 Mode debug (infos techniques)', value=st.session_state.get('debug_mode', False))
+def afficher_figure(fig) -> None:
+    """Affiche une figure matplotlib puis la libère.
 
-def debug_expander(msg, details):
-    """Affiche un expander avec un message et des infos debug si le mode debug est actif."""
-    if st.session_state.get('debug_mode', False):
-        with st.expander(msg):
-            st.write(details)
+    `st.pyplot` ne ferme pas la figure : sans `plt.close`, chaque rerun en
+    accumule une de plus dans le gestionnaire global de matplotlib. Sous le
+    plafond mémoire de Streamlit Cloud (~1 Go), les pages à cartes de circuit
+    finissaient par faire tuer le processus.
+    """
+    import matplotlib.pyplot as plt
 
-def context_sidebar_only():
-    """Résumé session chargée sans aucune interaction ni selectbox."""
-    with st.sidebar:
-        st.markdown("""
-        <div style='font-size:1.1em;font-weight:bold;margin-bottom:0.5em;'>📋 <u>Session courante :</u></div>""", unsafe_allow_html=True)
-        annee = st.session_state.get("annee")
-        grand_prix = st.session_state.get("grand_prix")
-        session_type = st.session_state.get("session_type")
-        loaded = st.session_state.get("loaded")
-        if loaded and annee and grand_prix and session_type:
-            st.markdown(f"""
-            <div style='font-size:0.98em;'><b>🎯 Session:</b> {annee} – {grand_prix} [{session_type}]</div>""", unsafe_allow_html=True)
-        else:
-            st.error("Aucune session chargée. Revenez à la page Home.")
+    st.pyplot(fig, width="stretch")
+    plt.close(fig)

@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import streamlit as st
 from . import adaptateurs, openf1
+from .openf1 import OpenF1SansDonnees
 from .theme import (
     AXIS,
     CATEGORIQUE,
@@ -17,9 +18,15 @@ from .theme import (
     couleur_pilote,
 )
 from .utils import formatage_timedelta
+import matplotlib as mpl
+
+# Backend non interactif : le serveur n'a pas d'affichage, et un backend GUI
+# ouvrirait des fenêtres fantômes (ou échouerait) selon l'hôte. À poser avant
+# l'import de pyplot.
+mpl.use("Agg")
+
 import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib as mpl
 from matplotlib.collections import LineCollection
 
 logger = logging.getLogger("f1_analytics.data")
@@ -146,7 +153,7 @@ def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 6)
     """
     session = openf1.trouver_session(annee, course, sess_type)
     if session is None:
-        raise RuntimeError(
+        raise OpenF1SansDonnees(
             f"Session introuvable : {annee} – {course} ({sess_type}). "
             "Elle n'a peut-être pas encore eu lieu, ou n'est pas publiée."
         )
@@ -166,7 +173,7 @@ def _chargement_dataframes(annee: int, course: str, sess_type: str, _v: int = 6)
         brut["tours"], pilotes_bruts, brut["relais"], brut["arrets"],
     )
     if tours.empty:
-        raise RuntimeError(
+        raise OpenF1SansDonnees(
             f"Aucun tour disponible pour {annee} – {course} ({sess_type}). "
             "Les données paraissent quelques heures après la session."
         )

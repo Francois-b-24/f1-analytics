@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 
 from src.config import configure_page
 from src.ui import selections_courantes
-from src.data import chargement_session
+from src.session import charger_session_ou_stopper
 from src.analytics import (
     stint_degradation,
     stint_degradation_fits,
@@ -18,11 +18,8 @@ st.subheader("Pneus & Stratégie")
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 
-if not loaded:
-    st.info("Charge d’abord une session depuis la page Home.")
-    st.stop()
 
-data = chargement_session(annee, grand_prix, session_type)
+data = charger_session_ou_stopper(annee, grand_prix, session_type)
 tours = data["tours"]
 pilotes = data["pilotes"]
 

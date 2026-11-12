@@ -1,7 +1,7 @@
 import streamlit as st
 from src.config import configure_page
 from src.ui import selections_courantes
-from src.data import chargement_session
+from src.session import charger_session_ou_stopper
 
 configure_page("F1 Analytics – Export & Données")
 
@@ -9,12 +9,8 @@ st.subheader("Exports rapides")
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 
-if not loaded:
-    st.warning("Aucune session n'est chargée. Retournez à l'accueil.")
-    st.page_link("Home.py", label="🏠 Retour à la Home")
-    st.stop()
 
-data = chargement_session(annee, grand_prix, session_type)
+data = charger_session_ou_stopper(annee, grand_prix, session_type)
 tours = data["tours"]
 meteo = data["meteo"]
 resultats = data["resultats"]

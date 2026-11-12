@@ -11,7 +11,8 @@ from src.analytics import (
     resume_proxys_energie,
 )
 from src.config import configure_page
-from src.data import chargement_session, telemetrie_pilote
+from src.session import charger_session_ou_stopper
+from src.data import telemetrie_pilote
 from src.theme import ACCENT_BLUE, ACCENT_GOLD, ACCENT_RED, FREINAGE, TRACTION
 from src.ui import selections_courantes
 
@@ -62,11 +63,8 @@ que les indicateurs ci-dessous sont construits.
     )
 
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
-if not loaded:
-    st.info("Charge d'abord une session depuis la page Home.")
-    st.stop()
 
-data = chargement_session(annee, grand_prix, session_type)
+data = charger_session_ou_stopper(annee, grand_prix, session_type)
 pilotes = data["pilotes"]
 best_laps = data.get("best_laps", {})
 

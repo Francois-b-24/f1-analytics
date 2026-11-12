@@ -5,8 +5,6 @@ from pathlib import Path
 
 import streamlit as st
 import fastf1
-from streamlit_extras.colored_header import colored_header
-from streamlit_extras.add_vertical_space import add_vertical_space
 
 from .theme import appliquer_theme_plotly
 
@@ -121,13 +119,3 @@ def configure_page(title: str = "F1 Analytics", page_icon: str = "📊", menu_it
     )
     load_theme_css()
     appliquer_theme_plotly()
-
-
-def section_header(title: str, description: str | None = None, color_name: str = "blue-70"):
-    """Affiche un en-tête coloré pour garder un style cohérent sur toutes les pages."""
-    colored_header(title, description=description, color_name=color_name)
-
-
-def spacer(lines: int = 1):
-    """Ajoute un espace vertical entre les sections."""
-    add_vertical_space(lines)
