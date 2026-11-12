@@ -8,21 +8,22 @@ Community Cloud : <https://f1-fastanalytics.streamlit.app>.
 ## Commandes
 
 ```bash
-# Lancer l'application
-streamlit run streamlit_app.py
-
-# Tests — les fichiers analytics/adaptateurs/figures/utils sont 100 % hors ligne
-pytest tests/ -v
-pytest tests/ -v --ignore=tests/test_data_smoke.py   # exclut le seul test réseau
-pytest tests/test_adaptateurs.py::test_construire_tours_colonnes_et_valeurs -v
-
-# Lint — bloquant en CI, doit rester clean
-ruff check .
-ruff check . --fix
-
-# Installation
-uv sync                          # ou : pip install -r requirements.txt
+make help          # liste les cibles disponibles
+make run           # lance l'application
+make check         # ce qu'exige la CI : lint + suite hors ligne
+make test          # suite hors ligne seule (~3 s, aucun accès réseau)
+make test-reseau   # uniquement les tests interrogeant OpenF1
+make cov           # couverture de src/
+make install-dev   # dépendances + outillage (ruff, pytest, pre-commit)
+make hooks         # installe les hooks pre-commit
 ```
+
+Les tests réseau portent le marqueur `reseau` : `make test` les exclut. C'est
+`tests/test_data_smoke.py`, et lui seul, qui touche l'API. Sans ce marqueur, sa
+sonde de connectivité s'évaluait à la **collecte** et ajoutait jusqu'à 3 s à
+chaque exécution, même hors ligne.
+
+Pour un test ciblé : `pytest tests/test_adaptateurs.py::test_x -v`.
 
 `pyproject.toml` fixe `pythonpath = ["."]` : les tests importent `from src...`
 sans dépendre du répertoire courant.
@@ -188,6 +189,21 @@ du projet (`_RACINE`), sinon un point d'entrée placé ailleurs lève
 
 Streamlit Cloud lit `requirements.txt` (versions épinglées), `runtime.txt` et
 `.streamlit/config.toml`. Push sur `master` → rebuild automatique.
+
+**Deux sources de dépendances, deux rôles** : `requirements.txt` fixe les
+versions exactes (c'est lui que lit Streamlit Cloud) ; `pyproject.toml` déclare
+les bornes basses et le groupe `dev`. Les versions d'outillage (ruff, pytest)
+sont épinglées **au même numéro** dans `pyproject.toml`, `.pre-commit-config.yaml`
+et la CI : une divergence suffit à produire un lint rouge en CI alors que tout
+passe en local.
+
+La CI a deux jobs. `qualite` est **bloquant** et n'accède pas au réseau : il ne
+doit dépendre de rien d'extérieur, puisqu'un échec gèle le redéploiement.
+`contrat-openf1` interroge la vraie API en `continue-on-error` : une panne
+d'OpenF1 informe sans bloquer la production.
+
+Aucun seuil de couverture n'est imposé, délibérément : un seuil non atteint
+rougirait la CI et figerait la production pour une raison non fonctionnelle.
 
 Point d'attention constaté : **la CI qui échoue bloque le redéploiement**. Un
 lint rouge suffit à figer la production sur une version antérieure. Si la prod

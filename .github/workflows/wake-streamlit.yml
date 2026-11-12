@@ -10,6 +10,9 @@ on:
 jobs:
   probe_deployed_app:
     runs-on: ubuntu-latest
+    # Sans plafond, une sonde Puppeteer qui se bloque consomme les minutes
+    # d'exécution jusqu'au timeout par défaut (6 h).
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repo
