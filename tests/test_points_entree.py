@@ -48,18 +48,47 @@ def test_les_dix_pages_sont_presentes():
     assert len(pages) == NB_PAGES_ATTENDU, f"Pages trouvées : {pages}"
 
 
-def test_alias_delegue_bien_a_home():
-    """L'alias exécute Home.py sans réintroduire le routeur retiré.
+def test_navigation_explicite_declaree():
+    """Le routeur déclare les pages explicitement, pas par découverte implicite.
 
-    Lecture statique : exécuter le fichier lancerait Streamlit hors contexte.
+    C'est ce qui a cassé la production : la découverte implicite n'est active
+    que si `pages/` est adjacent au fichier d'entrée, condition invérifiable
+    depuis le dépôt puisque le chemin d'entrée est configuré chez l'hébergeur.
     """
     source = (RACINE / "streamlit_app.py").read_text(encoding="utf-8")
-    assert "Home.py" in source, "L'alias ne référence pas Home.py."
-    assert "run_name=\"__main__\"" in source, (
-        "Home.py doit être exécuté sous __main__, sinon st.set_page_config() "
-        "n'est plus le premier appel Streamlit."
+    assert "st.navigation" in source, (
+        "Le routeur doit déclarer les pages via st.navigation, sinon la "
+        "navigation redevient dépendante du chemin du fichier d'entrée."
     )
-    assert "src.navigation" not in source, (
-        "src/navigation.py a été retiré du projet : l'alias ne doit pas le "
-        "réintroduire."
-    )
+    assert "construire_pages" in source
+
+
+def test_home_delegue_au_routeur_si_lance_directement():
+    """Lancé directement, Home.py délègue au routeur.
+
+    Sans cela, un hébergeur configuré sur Home.py rendrait l'accueil seul,
+    sans barre latérale — le symptôme exact observé en production.
+    """
+    source = (RACINE / "Home.py").read_text(encoding="utf-8")
+    assert '__name__ == "__main__"' in source
+    assert "streamlit_app.py" in source
+
+
+def test_navigation_ancre_les_chemins_sur_la_racine():
+    """Les pages sont ancrées sur __file__, pas sur le répertoire courant.
+
+    st.Page résout les chemins relatifs depuis le fichier d'entrée : un
+    ancrage relatif casserait dès que l'entrée n'est pas à la racine.
+    """
+    source = (RACINE / "src" / "navigation.py").read_text(encoding="utf-8")
+    assert "__file__" in source
+
+
+def test_toutes_les_pages_sont_declarees():
+    """Chaque fichier de pages/ figure dans la déclaration du routeur."""
+    from src.navigation import _DECLARATION
+
+    declares = {nom for nom, _, _ in _DECLARATION}
+    sur_disque = {p.name for p in (RACINE / "pages").glob("*.py")}
+    manquants = sur_disque - declares
+    assert not manquants, f"Pages non déclarées dans le routeur : {manquants}"

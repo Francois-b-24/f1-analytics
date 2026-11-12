@@ -1,28 +1,49 @@
-"""Alias du point d'entrée — délègue à Home.py.
+"""Point d'entrée de l'application.
 
-Raison d'être : le réglage « Main file path » de Streamlit Cloud vit dans les
-paramètres de l'app, hors du dépôt. Il pointe sur `streamlit_app.py`, nom hérité
-de la phase 2 et supprimé depuis. Résultat en production : Streamlit démarrait
-sans erreur mais ne découvrait pas le dossier `pages/`, car la découverte
-implicite exige que `pages/` soit adjacent au fichier d'entrée. L'app servait
-donc l'accueil seul, barre latérale vide, les dix onglets inatteignables.
+Pourquoi ce fichier, et pourquoi il déclare la navigation
+---------------------------------------------------------
+La production n'affichait plus aucune page : barre latérale absente, dix
+onglets inatteignables, et pas la moindre erreur dans les logs — l'app servait
+l'accueil seul. Le serveur Streamlit Cloud n'annonçait qu'une page dans son
+message de session, alors que le même code annonçait les dix en local.
 
-Ce fichier rétablit ce nom à la racine, à côté de `pages/`. Les deux points
-d'entrée sont désormais équivalents :
+Cause : la navigation reposait sur la découverte implicite du dossier
+``pages/``, que Streamlit n'active que si ce dossier est adjacent au fichier
+d'entrée, test effectué une seule fois au démarrage du process. Le « Main file
+path » configuré côté Cloud vit hors du dépôt : aucun test ne pouvait l'attraper
+et rien dans le code ne permettait de le corriger.
+
+``src/navigation.py`` déclare donc les pages explicitement, ancrées sur la
+racine du projet. L'app expose les mêmes dix pages quel que soit le fichier
+d'entrée lancé et quel que soit le répertoire courant.
+
+Les deux points d'entrée restent équivalents :
 
     streamlit run Home.py
     streamlit run streamlit_app.py
-
-Volontairement mince : il ne réintroduit ni `src/navigation.py` ni le routeur
-`st.navigation` de la phase 2, tous deux retirés. La navigation reste implicite,
-fondée sur le dossier `pages/`.
-
-`runpy` exécute Home.py sous le nom `__main__`, donc exactement comme le ferait
-un lancement direct : `st.set_page_config()` y reste le premier appel Streamlit.
-Un simple `import` aurait fait porter le nom de module `Home` au script, ce qui
-n'est pas la façon dont Streamlit attend qu'un point d'entrée soit exécuté.
 """
 import runpy
 from pathlib import Path
 
-runpy.run_path(str(Path(__file__).parent / "Home.py"), run_name="__main__")
+import streamlit as st
+
+from src.config import configure_page_home
+from src.navigation import construire_pages
+
+configure_page_home("F1 Analytics")
+
+_HOME = Path(__file__).resolve().parent / "Home.py"
+
+
+def _accueil() -> None:
+    """Rend la page d'accueil.
+
+    ``Home.py`` est exécuté comme un script plutôt qu'importé : il s'exécute
+    de haut en bas et n'expose aucune fonction de rendu. ``run_name`` n'est
+    pas ``"__main__"`` ici — l'accueil est une page parmi d'autres, et
+    ``set_page_config()`` a déjà été appelé ci-dessus.
+    """
+    runpy.run_path(str(_HOME), run_name="__page__")
+
+
+st.navigation(construire_pages(_accueil)).run()

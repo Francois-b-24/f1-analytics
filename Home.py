@@ -1,4 +1,30 @@
+"""Accueil de l'application — et point d'entrée historique.
+
+Ce fichier a deux rôles, distingués par ``__name__`` :
+
+* lancé directement (``streamlit run Home.py``), il délègue au routeur
+  ``streamlit_app.py``, qui déclare explicitement les dix pages. Sans cela la
+  navigation dépendrait de la découverte implicite du dossier ``pages/``, qui
+  n'est active que si ce dossier est adjacent au fichier d'entrée — condition
+  fausse en production, où l'app ne servait plus que l'accueil ;
+* exécuté par ce routeur (``run_name="__page__"``), il rend simplement
+  l'accueil, la configuration de page ayant déjà été faite en amont.
+"""
 import streamlit as st
+
+if __name__ == "__main__":
+    # Lancement direct : on délègue au routeur plutôt que de rendre l'accueil
+    # seul. `st.navigation` y déclare les pages, donc la barre latérale existe
+    # quel que soit le fichier d'entrée configuré côté hébergeur.
+    import runpy
+    from pathlib import Path as _Path
+
+    runpy.run_path(
+        str(_Path(__file__).resolve().parent / "streamlit_app.py"),
+        run_name="__router__",
+    )
+    st.stop()
+
 from src.config import configure_page_home
 from src.ui import selecteurs_session, sidebar_hint_once
 from src.data import chargement_session
