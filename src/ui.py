@@ -262,5 +262,5 @@ def afficher_figure(fig) -> None:
     """
     import matplotlib.pyplot as plt
 
-    st.pyplot(fig, use_container_width=True)
+    st.pyplot(fig, width="stretch")
     plt.close(fig)

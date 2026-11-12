@@ -20,7 +20,7 @@ data = chargement_session(annee, grand_prix, session_type)
 meteo = data["meteo"]
 
 if not meteo.empty:
-    st.dataframe(meteo, use_container_width=True)
+    st.dataframe(meteo, width="stretch")
     xcol = 'SessionTimeSec' if 'SessionTimeSec' in meteo else 'Time'
     # --- KPI : Écart moyen entre la température piste et air ---
     if 'AirTemp' in meteo and 'TrackTemp' in meteo:
@@ -50,20 +50,20 @@ if not meteo.empty:
         fig_all.update_xaxes(title_text='Temps de session')
         fig_all.update_yaxes(title_text='Température (°C)', secondary_y=False)
 
-        st.plotly_chart(fig_all, use_container_width=True)
+        st.plotly_chart(fig_all)
 
     if 'AirTemp' in meteo:
         fig_t = px.line(meteo, x=xcol, y='AirTemp', labels={'AirTemp':'Température air (°C)'}, title="Température de l'air")
         fig_t.update_xaxes(title_text="Temps de session")
-        st.plotly_chart(fig_t, use_container_width=True)
+        st.plotly_chart(fig_t)
     if 'TrackTemp' in meteo:
         fig_tt = px.line(meteo, x=xcol, y='TrackTemp', labels={'TrackTemp':'Température piste (°C)'}, title="Température de la piste")
         fig_tt.update_xaxes(title_text="Temps de session")
-        st.plotly_chart(fig_tt, use_container_width=True)
+        st.plotly_chart(fig_tt)
     if 'WindSpeed' in meteo:
         fig_w = px.line(meteo, x=xcol, y='WindSpeed', labels={'WindSpeed':'Vent (m/s)'}, title="Vitesse du vent")
         fig_w.update_xaxes(title_text="Temps de session")
-        st.plotly_chart(fig_w, use_container_width=True)
+        st.plotly_chart(fig_w)
 
 
 else:
