@@ -3,8 +3,8 @@ import os
 import tempfile
 from pathlib import Path
 
-import streamlit as st
 import fastf1
+import streamlit as st
 
 from .theme import appliquer_theme_plotly
 

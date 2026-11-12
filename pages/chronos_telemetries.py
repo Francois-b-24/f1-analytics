@@ -1,15 +1,13 @@
-import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
-
-from src.ui import selecteurs_pilotes, selections_courantes, entete_page
-from src.session import charger_session_ou_stopper
-from src.data import tour_rapide_tel
-from src.utils import formatage_timedelta
-from src.analytics import delta_time_vs_distance
-
+import streamlit as st
 from streamlit_extras.colored_header import colored_header
 
+from src.analytics import delta_time_vs_distance
+from src.data import tour_rapide_tel
+from src.session import charger_session_ou_stopper
+from src.ui import entete_page, selecteurs_pilotes, selections_courantes
+from src.utils import formatage_timedelta
 
 entete_page("chronos_telemetries")
 st.caption("Comparaison des performances entre 2 pilotes possible.")

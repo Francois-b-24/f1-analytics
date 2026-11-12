@@ -1,10 +1,11 @@
 import pandas as pd
-import streamlit as st
 import plotly.express as px
-from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-from src.ui import selections_courantes, entete_page
+import streamlit as st
+from plotly.subplots import make_subplots
+
 from src.session import charger_session_ou_stopper
+from src.ui import entete_page, selections_courantes
 
 entete_page("meteo")
 

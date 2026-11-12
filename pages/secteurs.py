@@ -1,11 +1,10 @@
-import streamlit as st
 import plotly.express as px
-
-from src.ui import selections_courantes, entete_page
-from src.session import charger_session_ou_stopper
-from src.analytics import sector_times_long, sector_best_per_driver
+import streamlit as st
 from streamlit_extras.colored_header import colored_header
 
+from src.analytics import sector_best_per_driver, sector_times_long
+from src.session import charger_session_ou_stopper
+from src.ui import entete_page, selections_courantes
 
 entete_page("secteurs")
 st.caption(

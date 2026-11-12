@@ -1,10 +1,14 @@
-from src.data import figure_carte_vitesse, figure_carte_rapports
 import streamlit as st
-from src.session import charger_session_ou_stopper
-from src.data import telemetrie_pilote
-from src.ui import selections_courantes, selecteur_pilote_unique, afficher_figure, entete_page
 from streamlit_extras.colored_header import colored_header
 
+from src.data import figure_carte_rapports, figure_carte_vitesse, telemetrie_pilote
+from src.session import charger_session_ou_stopper
+from src.ui import (
+    afficher_figure,
+    entete_page,
+    selecteur_pilote_unique,
+    selections_courantes,
+)
 
 entete_page("cartographie")
 st.caption(

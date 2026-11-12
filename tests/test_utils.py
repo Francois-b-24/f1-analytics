@@ -1,5 +1,7 @@
 import pandas as pd
+
 from src.utils import formatage_timedelta
+
 
 def test_formatage_timedelta_none():
     assert formatage_timedelta(None) == '—'

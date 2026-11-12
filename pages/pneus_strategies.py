@@ -1,15 +1,15 @@
-import streamlit as st
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit as st
 
-from src.ui import selections_courantes, entete_page
-from src.session import charger_session_ou_stopper
 from src.analytics import (
     stint_degradation,
     stint_degradation_fits,
     tyre_degradation_matrix,
 )
+from src.session import charger_session_ou_stopper
+from src.ui import entete_page, selections_courantes
 
 entete_page("pneus_strategies")
 
