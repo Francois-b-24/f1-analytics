@@ -36,5 +36,8 @@ jobs:
           FASTF1_CACHE: ${{ runner.temp }}/fastf1_cache
         run: pytest tests/ -v --tb=short
 
-      - name: Smoke import du routeur
-        run: python -c "import streamlit_app"
+      # Un simple import ne suffit pas : la panne « Error running app » vécue en
+      # production venait du rendu, pas de l'import. Les tests de
+      # tests/test_points_entree.py exécutent réellement chaque point d'entrée.
+      - name: Démarrage des points d'entrée
+        run: pytest tests/test_points_entree.py -v
