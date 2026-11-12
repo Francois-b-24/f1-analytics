@@ -16,6 +16,18 @@ dependencies = [
 [tool.ruff]
 target-version = "py310"
 
+[tool.ruff.lint]
+# Jeu de règles **explicite**. Sans ce select, ruff applique ses défauts, qui
+# varient d'une version à l'autre : la CI (ruff non épinglé) signalait I001
+# alors que `ruff check .` passait en local. Déclarer les règles rend les deux
+# environnements identiques quelle que soit la version.
+# E4/E7/E9 + F sont les défauts de ruff ; I (tri des imports) est ajouté
+# explicitement parce que la CI le signalait déjà alors que `ruff check .`
+# passait en local. E501 (longueur de ligne) est volontairement **exclu** :
+# l'activer produirait des centaines d'erreurs sur du code existant, et une CI
+# rouge gèle le redéploiement. À traiter séparément, par vagues.
+select = ["E4", "E7", "E9", "F", "I"]
+
 [tool.ruff.lint.per-file-ignores]
 # src/data.py doit poser le backend matplotlib ("Agg") avant d'importer pyplot :
 # l'import suit donc un appel de code, ce que E402 interdit par défaut.

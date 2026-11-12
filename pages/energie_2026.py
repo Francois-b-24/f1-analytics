@@ -10,10 +10,10 @@ from src.analytics import (
     phases_telemetrie,
     resume_proxys_energie,
 )
-from src.session import charger_session_ou_stopper
 from src.data import telemetrie_pilote
+from src.session import charger_session_ou_stopper
 from src.theme import ACCENT_BLUE, ACCENT_GOLD, ACCENT_RED, FREINAGE, TRACTION
-from src.ui import selections_courantes, entete_page
+from src.ui import entete_page, selections_courantes
 
 entete_page("energie_2026")
 st.caption(

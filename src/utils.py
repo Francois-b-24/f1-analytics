@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 def formatage_timedelta(td) -> str:
     """
     Formate un pandas.Timedelta ou None en format mm:ss.ms.

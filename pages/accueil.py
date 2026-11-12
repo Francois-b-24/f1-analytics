@@ -1,14 +1,14 @@
-import streamlit as st
-from src.ui import selections_courantes, sidebar_hint_once
-from src.session import charger_session_ou_stopper
-from src.utils import formatage_timedelta
-from src.theme import COMPOSES, ORDRE_COMPOSES
-from src.pedagogie import explication
-import plotly.express as px
 import pandas as pd
-from streamlit_extras.colored_header import colored_header
+import plotly.express as px
+import streamlit as st
 from streamlit_extras.add_vertical_space import add_vertical_space
+from streamlit_extras.colored_header import colored_header
 
+from src.pedagogie import explication
+from src.session import charger_session_ou_stopper
+from src.theme import COMPOSES, ORDRE_COMPOSES
+from src.ui import selections_courantes, sidebar_hint_once
+from src.utils import formatage_timedelta
 
 st.markdown(
     """

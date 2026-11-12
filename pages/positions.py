@@ -1,7 +1,8 @@
 import streamlit as st
-from src.session import charger_session_ou_stopper
+
 from src.data import figure_positions_par_tour
-from src.ui import selections_courantes, afficher_figure, entete_page
+from src.session import charger_session_ou_stopper
+from src.ui import afficher_figure, entete_page, selections_courantes
 
 entete_page("positions")
 

@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
+import matplotlib as mpl
 import pandas as pd
 import streamlit as st
+
 from . import adaptateurs, openf1
 from .openf1 import OpenF1SansDonnees
 from .theme import (
@@ -18,7 +20,6 @@ from .theme import (
     couleur_pilote,
 )
 from .utils import formatage_timedelta
-import matplotlib as mpl
 
 # Backend non interactif : le serveur n'a pas d'affichage, et un backend GUI
 # ouvrirait des fenêtres fantômes (ou échouerait) selon l'hôte. À poser avant

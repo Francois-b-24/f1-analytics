@@ -1,11 +1,12 @@
 import streamlit as st
-from src.ui import entete_page, selections_courantes
-from src.session import charger_session_ou_stopper
+
 from src.data import (
-    classement_session,
-    calcul_classement_pilote,
     calcul_classement_constructeur,
+    calcul_classement_pilote,
+    classement_session,
 )
+from src.session import charger_session_ou_stopper
+from src.ui import entete_page, selections_courantes
 
 entete_page("classements")
 

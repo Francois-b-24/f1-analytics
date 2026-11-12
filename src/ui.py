@@ -1,6 +1,7 @@
-import streamlit as st
-import pandas as pd
 from datetime import datetime
+
+import pandas as pd
+import streamlit as st
 from streamlit_extras.colored_header import colored_header
 
 from .openf1 import PREMIERE_SAISON
