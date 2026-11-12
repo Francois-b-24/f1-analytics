@@ -221,3 +221,47 @@ def test_les_sous_classes_restent_compatibles():
     assert issubclass(openf1.OpenF1Indisponible, openf1.OpenF1Error)
     assert issubclass(openf1.OpenF1SansDonnees, openf1.OpenF1Error)
     assert issubclass(openf1.OpenF1Error, RuntimeError)
+
+
+# --------------------------------------------------------------------------
+# Limitation de débit
+# --------------------------------------------------------------------------
+
+def test_les_requetes_sont_espacees(monkeypatch):
+    """OpenF1 répond 429 au-delà de ~4 requêtes par demi-seconde.
+
+    Sans espacement, une requête sur cinq échouait et déclenchait une attente
+    de 5 à 20 s — bien plus coûteuse que la pause elle-même.
+    """
+    pauses = []
+    monkeypatch.setattr(openf1.time, "sleep", pauses.append)
+    monkeypatch.setattr(openf1, "_INTERVALLE_MIN_REQUETES", 0.5)
+    openf1.reinitialiser_debit()
+    _repondre(monkeypatch, [{"ok": True}])
+
+    openf1._get("sessions", year=2026)
+    openf1._get("sessions", year=2026)
+
+    # La première requête part sans attendre, la seconde patiente.
+    assert pauses, "la seconde requête doit être espacée de la première"
+    assert pauses[-1] <= 0.5
+
+
+def test_l_espacement_reste_mesure():
+    """Garde-fou : trop d'espacement coûte plus cher que le quota.
+
+    Mesuré sur le chargement des 7 endpoints d'une session, cache neutralisé :
+    0,10 s → 2,8 s ; 0,20 s → 2,9 s ; 0,30 s → 42,9 s. La valeur ne doit donc
+    pas être augmentée « par prudence » sans remesurer.
+    """
+    assert 0 < openf1._INTERVALLE_MIN_REQUETES <= 0.2
+
+
+def test_reinitialiser_debit_oublie_le_dernier_appel(monkeypatch):
+    monkeypatch.setattr(openf1.time, "sleep", lambda _: None)
+    _repondre(monkeypatch, [{"ok": True}])
+    openf1._get("sessions", year=2026)
+
+    openf1.reinitialiser_debit()
+
+    assert openf1._dernier_appel == 0.0

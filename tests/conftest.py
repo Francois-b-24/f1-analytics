@@ -21,6 +21,22 @@ import streamlit as st
 
 
 @pytest.fixture(autouse=True)
+def _debit_openf1_neutre():
+    """Neutralise le limiteur de débit entre tests.
+
+    `src.openf1` espace les départs de requêtes via un état de module. Sans
+    remise à zéro, un test qui émet une requête décale la temporisation du
+    suivant — et les tests qui comptent les appels à `time.sleep` deviennent
+    dépendants de leur ordre d'exécution.
+    """
+    from src import openf1
+
+    openf1.reinitialiser_debit()
+    yield
+    openf1.reinitialiser_debit()
+
+
+@pytest.fixture(autouse=True)
 def _caches_vides():
     """Vide les caches Streamlit autour de chaque test.
 

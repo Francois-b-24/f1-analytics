@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -37,6 +38,54 @@ _ATTENTE_ENTRE_TENTATIVES = 1.5
 # observé). Le plafond évite qu'un quota mal annoncé ne fige l'application.
 _ATTENTE_QUOTA_DEFAUT = 5.0
 _ATTENTE_QUOTA_MAX = 20.0
+
+# Espacement minimal entre deux départs de requête, **calibré par mesure**
+# contre l'API en novembre 2026 (OpenF1 répond 429 au-delà de ~4 requêtes par
+# demi-seconde). Chargement des 7 endpoints d'une session, cache neutralisé :
+#
+#   sans espacement  3,4 s   (mais ~1 requête sur 5 en 429, donc instable)
+#   0,10 s           2,8 s   ← retenu
+#   0,20 s           2,9 s
+#   0,30 s          42,9 s   (l'espacement coûte plus que les pénalités)
+#
+# La valeur n'est donc pas « le plus prudent possible » : trop d'espacement
+# dégrade davantage que le quota lui-même. Toute modification doit être
+# remesurée, pas estimée.
+#
+# Ce plafond est global au processus, donc il borne aussi les appels
+# parallèles — qui sans cela se cumulent et saturent le quota à eux seuls.
+_INTERVALLE_MIN_REQUETES = 0.10
+
+_verrou_debit = threading.Lock()
+_dernier_appel = 0.0
+
+
+def _attendre_son_tour() -> None:
+    """Espace les requêtes d'au moins `_INTERVALLE_MIN_REQUETES`.
+
+    Sérialise l'instant de départ des requêtes sans sérialiser leur attente
+    réseau : les threads parallèles gardent leur intérêt, ils ne partent
+    simplement pas tous en même temps.
+    """
+    global _dernier_appel
+    with _verrou_debit:
+        attente = _INTERVALLE_MIN_REQUETES - (time.monotonic() - _dernier_appel)
+        _dernier_appel = time.monotonic()
+    # Hors du verrou : un thread qui attend ne doit pas bloquer les autres
+    # dans le calcul de leur propre tour.
+    if attente > 0:
+        time.sleep(attente)
+
+
+def reinitialiser_debit() -> None:
+    """Oublie la dernière requête émise.
+
+    Destiné aux tests : `_dernier_appel` est un état de module, donc un test
+    qui déclenche une requête influencerait la temporisation du suivant.
+    """
+    global _dernier_appel
+    _dernier_appel = 0.0
+
 
 # Nombre de requêtes menées en parallèle (télémétrie, métadonnées).
 # Mesuré sur une grille complète : le facteur limitant est le temps de réponse
@@ -94,6 +143,7 @@ def _get(endpoint: str, **params) -> list[dict]:
     derniere: Exception | None = None
 
     for tentative in range(1, _TENTATIVES + 1):
+        _attendre_son_tour()
         try:
             requete = urllib.request.Request(
                 url, headers={"User-Agent": "f1-analytics", "Accept": "application/json"}
