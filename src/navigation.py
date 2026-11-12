@@ -16,7 +16,14 @@ Deux précautions :
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
+
+# `st.Page` résout un chemin relatif par rapport au **script d'entrée**, pas au
+# module qui le déclare. Partir de la racine du projet rend le registre
+# indépendant du point d'entrée choisi (streamlit_app.py, Home.py, ou un test).
+_RACINE = Path(__file__).resolve().parent.parent
 
 # Un seul endroit décrit chaque page : fichier, libellé, icône, URL.
 # L'ordre des sections et des entrées est celui de la barre latérale.
@@ -68,7 +75,7 @@ def construire_sections() -> dict[str, list]:
     return {
         section: [
             st.Page(
-                entree["fichier"],
+                _RACINE / entree["fichier"],
                 title=entree["titre"],
                 icon=entree["icone"],
                 url_path=entree["url"],
@@ -88,7 +95,7 @@ def page_accueil():
     les liens de retour.
     """
     return st.Page(
-        _FICHIER_ACCUEIL,
+        _RACINE / _FICHIER_ACCUEIL,
         title="Accueil",
         icon=":material/home:",
         url_path="accueil",
@@ -104,7 +111,7 @@ def entrees_declarees() -> list[dict[str, str]]:
 def page_glossaire():
     """Objet `st.Page` du glossaire, pour le lien depuis la barre latérale."""
     return st.Page(
-        _FICHIER_GLOSSAIRE,
+        _RACINE / _FICHIER_GLOSSAIRE,
         title="Glossaire & méthodologie",
         icon=":material/menu_book:",
         url_path="glossaire",

@@ -170,6 +170,22 @@ réelles, il ne contient que des `0` en 2026 comme en 2024.
 
 ## Déploiement
 
+**Le point d'entrée est configuré hors du dépôt.** Streamlit Cloud stocke le
+« Main file path » dans les réglages de l'app : renommer le fichier d'entrée
+casse la production (« Error running app ») sans que lint, tests ni CI ne
+rougissent. C'est arrivé en renommant `Home.py` en `streamlit_app.py`.
+
+`Home.py` subsiste donc comme alias délégant à `streamlit_app.py`, et
+`tests/test_points_entree.py` vérifie que **les deux** démarrent réellement
+(pas seulement qu'ils s'importent). Pour supprimer l'alias : changer le réglage
+côté Streamlit Cloud, vérifier le démarrage, puis retirer le fichier *et* son
+entrée dans `POINTS_ENTREE`.
+
+Corollaire : `st.Page` résout les chemins relatifs depuis le **script d'entrée**,
+pas depuis le module déclarant. `src/navigation.py` les ancre donc sur la racine
+du projet (`_RACINE`), sinon un point d'entrée placé ailleurs lève
+« Unable to create Page ».
+
 Streamlit Cloud lit `requirements.txt` (versions épinglées), `runtime.txt` et
 `.streamlit/config.toml`. Push sur `master` → rebuild automatique.
 
