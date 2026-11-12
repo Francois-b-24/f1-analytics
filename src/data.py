@@ -320,44 +320,95 @@ def _round_upto(annee: int, upto_event: str) -> int | None:
     return noms.index(upto_event) + 1
 
 
-def _points_par_course(annee: int, nb_manches: int) -> pd.DataFrame:
-    """Points marqués course par course, jusqu'à la manche `nb_manches`.
+# Dernière saison couverte par Ergast. Au-delà, l'API répond **sans erreur**
+# mais avec un contenu vide : il faut donc tester le contenu, pas l'exception.
+ERGAST_DERNIERE_SAISON = 2024
 
-    Sert de repli quand Ergast est indisponible. Interroge OpenF1 plutôt que
-    de recharger chaque session FastF1 : l'API Live Timing est inaccessible
-    depuis l'hébergement, et un chargement complet par course serait lourd.
+# Nombre de courses chargées par lot. Le quota OpenF1 (HTTP 429) impose des
+# attentes pouvant atteindre 20 s par requête : découper permet d'afficher un
+# résultat partiel utilisable plutôt que de bloquer jusqu'au bout.
+TAILLE_LOT_COURSES = 4
 
-    Retour
-    ------
-    DataFrame : BroadcastName, TeamName, Points. Vide si rien d'exploitable.
+
+def _resultats_une_course(course: dict) -> pd.DataFrame | None:
+    """Points marqués sur une course. `None` si indisponible."""
+    cle = course.get("session_key")
+    if cle is None:
+        return None
+    try:
+        resultats = adaptateurs.construire_resultats(
+            openf1.resultats(cle), openf1.pilotes(cle)
+        )
+    except Exception as exc:
+        logger.debug("Résultats indisponibles (session %s): %s", cle, exc)
+        return None
+    colonnes = {"BroadcastName", "TeamName", "Points"}
+    if resultats.empty or not colonnes <= set(resultats.columns):
+        return None
+    return resultats[["BroadcastName", "TeamName", "Points"]]
+
+
+@st.cache_data(ttl=3600, show_spinner=False, max_entries=8)
+def _points_lot(annee: int, debut: int, fin: int) -> pd.DataFrame:
+    """Points des courses [debut, fin) de la saison, chargées en parallèle.
+
+    Caché **par lot** : un lot déjà chargé n'est pas rechargé quand
+    l'utilisateur revient sur la page, et les classements pilotes et
+    constructeurs partagent les mêmes lots.
     """
     try:
-        courses = openf1.courses(annee)[:nb_manches]
+        courses = openf1.courses(annee)[debut:fin]
     except Exception as exc:
         logger.warning("Calendrier %s indisponible: %s", annee, exc)
         return pd.DataFrame()
 
-    morceaux = []
-    for course in courses:
-        cle = course.get("session_key")
-        if cle is None:
-            continue
-        try:
-            resultats = adaptateurs.construire_resultats(
-                openf1.resultats(cle), openf1.pilotes(cle)
-            )
-        except Exception as exc:
-            logger.debug("Résultats indisponibles (session %s): %s", cle, exc)
-            continue
-        if not resultats.empty and {"BroadcastName", "TeamName", "Points"} <= set(resultats.columns):
-            morceaux.append(resultats[["BroadcastName", "TeamName", "Points"]])
+    with ThreadPoolExecutor(max_workers=openf1.REQUETES_SIMULTANEES) as executor:
+        morceaux = [m for m in executor.map(_resultats_une_course, courses)
+                    if m is not None]
 
     if not morceaux:
         return pd.DataFrame()
+    return pd.concat(morceaux, ignore_index=True)
 
-    points = pd.concat(morceaux, ignore_index=True)
-    points["Points"] = pd.to_numeric(points["Points"], errors="coerce").fillna(0)
-    return points
+
+def points_par_course_progressif(annee: int, nb_manches: int):
+    """Génère les points cumulés, lot par lot, pour un affichage progressif.
+
+    Produit des tuples `(points_cumulés, manches_chargées, total_manches)`.
+
+    Pourquoi un générateur : ce repli servait auparavant 46 requêtes en série
+    puis recommençait pour les constructeurs — mesuré à 39 s puis 123 s sur la
+    saison 2026, ce qui dépassait le délai toléré par l'hébergement et faisait
+    tomber l'application. Le facteur limitant est le quota OpenF1, pas le
+    nombre de requêtes : on ne peut donc pas simplement paralléliser
+    davantage. Rendre le chargement incrémental permet d'afficher un
+    classement partiel, correct et annoté, au lieu d'une page morte.
+    """
+    accumules = []
+    charge = 0
+    for debut in range(0, nb_manches, TAILLE_LOT_COURSES):
+        fin = min(debut + TAILLE_LOT_COURSES, nb_manches)
+        lot = _points_lot(annee, debut, fin)
+        charge = fin
+        if not lot.empty:
+            accumules.append(lot)
+        cumul = (pd.concat(accumules, ignore_index=True)
+                 if accumules else pd.DataFrame())
+        if not cumul.empty:
+            cumul["Points"] = pd.to_numeric(cumul["Points"], errors="coerce").fillna(0)
+        yield cumul, charge, nb_manches
+
+
+def _points_par_course(annee: int, nb_manches: int) -> pd.DataFrame:
+    """Points de toutes les manches — consomme le générateur jusqu'au bout.
+
+    Conservé pour les appels qui n'affichent pas de progression (tests,
+    usage programmatique).
+    """
+    dernier = pd.DataFrame()
+    for cumul, _, _ in points_par_course_progressif(annee, nb_manches):
+        dernier = cumul
+    return dernier
 
 
 def _ergast() -> "object | None":
@@ -388,7 +439,9 @@ def calcul_classement_pilote(annee: int, upto_event: str) -> pd.DataFrame:
     if rnd is None:
         return pd.DataFrame()
 
-    erg = _ergast()
+    # Ergast s'arrête après 2024 : au-delà il répond sans erreur mais à vide.
+    # L'interroger quand même coûte une requête pour rien.
+    erg = _ergast() if annee <= ERGAST_DERNIERE_SAISON else None
     if erg is not None:
         try:
             resp = erg.get_driver_standings(season=annee, round=rnd)
@@ -433,7 +486,7 @@ def calcul_classement_constructeur(annee: int, upto_event: str) -> pd.DataFrame:
     if rnd is None:
         return pd.DataFrame()
 
-    erg = _ergast()
+    erg = _ergast() if annee <= ERGAST_DERNIERE_SAISON else None
     if erg is not None:
         try:
             resp = erg.get_constructor_standings(season=annee, round=rnd)
@@ -457,6 +510,44 @@ def calcul_classement_constructeur(annee: int, upto_event: str) -> pd.DataFrame:
     standings = classement.sort_values("Points", ascending=False).reset_index(drop=True)
     standings["Position"] = standings.index + 1
     return standings[["Position", "TeamName", "Points"]]
+
+def agreger_classement_pilotes(points: pd.DataFrame) -> pd.DataFrame:
+    """Classement pilotes à partir de points course par course."""
+    if points is None or points.empty:
+        return pd.DataFrame()
+    classement = (points.groupby(["BroadcastName", "TeamName"], dropna=False)["Points"]
+                  .sum().reset_index())
+    classement = classement.sort_values("Points", ascending=False).reset_index(drop=True)
+    classement["Position"] = classement.index + 1
+    classement["Points"] = classement["Points"].astype(int)
+    return classement[["Position", "BroadcastName", "TeamName", "Points"]]
+
+
+def agreger_classement_constructeurs(points: pd.DataFrame) -> pd.DataFrame:
+    """Classement constructeurs à partir de points course par course."""
+    if points is None or points.empty:
+        return pd.DataFrame()
+    classement = (points.groupby("TeamName", dropna=False)["Points"]
+                  .sum().reset_index())
+    classement = classement.sort_values("Points", ascending=False).reset_index(drop=True)
+    classement["Position"] = classement.index + 1
+    classement["Points"] = classement["Points"].astype(int)
+    return classement[["Position", "TeamName", "Points"]]
+
+
+def manches_de_la_saison(annee: int, upto_event: str) -> int | None:
+    """Numéro de la manche correspondant à `upto_event`, ou None."""
+    return _round_upto(annee, upto_event)
+
+
+def ergast_couvre(annee: int) -> bool:
+    """Ergast fournit-il les classements pour cette saison ?
+
+    Au-delà de sa dernière saison, Ergast répond **sans erreur** mais à vide :
+    tester l'année évite d'attribuer à une panne ce qui est une limite connue.
+    """
+    return annee <= ERGAST_DERNIERE_SAISON
+
 
 def classement_session(nb_tours: pd.DataFrame, results_df: pd.DataFrame, sess_type: str) -> pd.DataFrame:
     """
