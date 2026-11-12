@@ -2,15 +2,30 @@
 name = "formula1"
 version = "0.1.0"
 description = "Statistiques interactives sur la Formule 1."
-requires-python = ">=3.10"
+# Aligné sur runtime.txt (python-3.11) et sur la matrice de CI.
+requires-python = ">=3.11"
+# Les versions exactes vivent dans requirements.txt, que lit Streamlit Cloud.
+# Ici on déclare les bornes basses. `sentry-sdk` y figurait sans être déclaré.
 dependencies = [
-    "streamlit",
+    "streamlit>=1.50",
     "fastf1>=3.8.3",
-    "pandas",
-    "matplotlib",
-    "plotly",
-    "streamlit-extras",
+    "pandas>=2.0",
+    "matplotlib>=3.9",
+    "plotly>=6.0",
+    "streamlit-extras>=0.7",
     "numpy>=2.0.2",
+    "sentry-sdk>=2.18",
+]
+
+[project.optional-dependencies]
+# Outillage de développement : `make install-dev` ou `pip install -e ".[dev]"`.
+# Les versions sont épinglées comme en CI, pour qu'une release d'outil ne
+# puisse pas rougir le lint sans changement de code (déjà vécu avec ruff).
+dev = [
+    "pytest==8.3.4",
+    "pytest-cov==6.0.0",
+    "ruff==0.15.22",
+    "pre-commit>=4.0",
 ]
 
 [tool.ruff]
@@ -38,3 +53,6 @@ select = ["E4", "E7", "E9", "F", "I"]
 # depuis tests/ sans dépendre du cwd.
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "reseau: nécessite un accès réseau à l'API OpenF1 (exclu par `make test`)",
+]

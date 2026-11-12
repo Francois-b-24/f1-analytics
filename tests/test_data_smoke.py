@@ -3,6 +3,11 @@
 Distingue une indisponibilité de l'API (acceptable — `xfail`) d'une rupture de
 contrat ou de signature (vrai bug — `fail`). Les autres fichiers de tests sont
 entièrement hors ligne.
+
+Tous les tests de ce module portent le marqueur `reseau` : `make test` les
+exclut (`-m "not reseau"`), `make test-reseau` ne lance que ceux-là. Sans ce
+marqueur, la sonde `_acces_reseau()` s'évaluait à la **collecte** et ajoutait
+jusqu'à 3 s à chaque exécution de la suite, y compris hors ligne.
 """
 import socket
 
@@ -15,6 +20,8 @@ from src.openf1 import PREMIERE_SAISON
 # stables et intégralement publiées.
 ANNEE_REF = 2024
 COURSE_REF = "Australia Grand Prix (Melbourne)"
+
+pytestmark = pytest.mark.reseau
 
 
 def _acces_reseau(host: str = "api.openf1.org", port: int = 443, timeout: float = 3.0) -> bool:

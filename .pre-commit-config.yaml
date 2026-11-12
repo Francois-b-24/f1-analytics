@@ -1,0 +1,39 @@
+# Installation : make hooks  (ou : pre-commit install)
+#
+# Ruff ne tournait qu'en CI, donc un lint cassé n'était découvert qu'après le
+# push — et une CI rouge gèle le redéploiement Streamlit Cloud. Ces hooks le
+# détectent avant le commit.
+#
+# La version de ruff est épinglée sur celle de pyproject.toml et de la CI :
+# une divergence de version suffit à produire un lint rouge en CI alors que
+# tout passe en local (déjà vécu avec la règle I001).
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.22
+    hooks:
+      - id: ruff
+        args: [--fix]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        # uv.lock pèse ~800 Ko et est légitimement versionné.
+        args: [--maxkb=1024]
+      - id: detect-private-key
+
+  # Les tests hors ligne tiennent en ~3 s : assez rapide pour un hook, et ça
+  # évite de pousser un commit qui rougira la CI.
+  - repo: local
+    hooks:
+      - id: pytest-hors-ligne
+        name: pytest (hors ligne)
+        entry: pytest -m "not reseau" -q
+        language: system
+        pass_filenames: false
+        types: [python]

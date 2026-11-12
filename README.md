@@ -151,13 +151,25 @@ pip install -r requirements.txt
 ### Lancer l'app
 
 ```bash
-streamlit run streamlit_app.py
+make run          # ou : streamlit run streamlit_app.py
 ```
 
 ### Lancer les tests
 
 ```bash
-pytest tests/ -v
+make test         # suite hors ligne (~3 s, aucun accès réseau)
+make test-reseau  # uniquement les tests interrogeant l'API OpenF1
+make check        # ce qu'exige la CI : lint + suite hors ligne
+make cov          # couverture de src/
+```
+
+`make help` liste toutes les cibles.
+
+### Outillage de développement
+
+```bash
+make install-dev  # dépendances + ruff, pytest, pre-commit
+make hooks        # active les hooks pre-commit (lint avant chaque commit)
 ```
 
 ---
@@ -249,10 +261,17 @@ inaperçue.
 
 ## 🧪 CI
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) exécute à chaque push/PR :
-- `ruff check` (**bloquant**)
-- `pytest tests/`
-- Smoke import de `streamlit_app.py`
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) a deux jobs :
+
+**`qualite`** (bloquant, Python 3.11 et 3.12, sans accès réseau) :
+- `ruff check` — un lint rouge gèle le redéploiement
+- suite hors ligne avec couverture
+- démarrage réel de chaque point d'entrée (pas un simple import : la panne
+  « Error running app » vécue en production venait du rendu)
+
+**`contrat-openf1`** (informatif, `continue-on-error`) : interroge la vraie API
+pour détecter un changement de contrat, sans qu'une panne d'OpenF1 ne bloque la
+production.
 
 Les tests d'`analytics`, de `figures` et d'`utils` sont entièrement hors-ligne
 (fixtures synthétiques) ; seul `test_data_smoke.py` requiert le réseau et se
