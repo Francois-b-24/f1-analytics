@@ -1,7 +1,7 @@
 import streamlit as st
 from src.config import configure_page
 from src.data import figure_positions_par_tour, chargement_session
-from src.ui import selections_courantes
+from src.ui import selections_courantes, afficher_figure
 from src.navigation import lien_accueil
 
 configure_page("F1 Analytics – Performances")
@@ -21,4 +21,4 @@ data = chargement_session(annee, grand_prix, session_type)
 fig = figure_positions_par_tour(data["tours"])          # tous les pilotes
 # ou : figure_positions_par_tour(data["tours"], pilotes=["VER","HAM","LEC"])
 
-st.pyplot(fig)
+afficher_figure(fig)

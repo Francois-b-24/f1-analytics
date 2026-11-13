@@ -250,3 +250,20 @@ def context_sidebar_only():
             <div style='font-size:0.98em;'><b>🎯 Session:</b> {annee} – {grand_prix} [{session_type}]</div>""", unsafe_allow_html=True)
         else:
             st.error("Aucune session chargée. Revenez à la page Home.")
+
+
+def afficher_figure(fig) -> None:
+    """Affiche une figure matplotlib puis la libère.
+
+    `st.pyplot` ne ferme pas la figure qu'on lui passe : elle reste référencée
+    par le gestionnaire global de matplotlib et n'est jamais collectée.
+    Mesuré sur `figure_positions_par_tour`, 30 rendus laissaient 30 figures
+    ouvertes et +100 Mo de RSS, contre +20 Mo une fois fermées (et la figure
+    construite avec `layout="constrained"`). Sous le plafond de Streamlit
+    Cloud (~1 Go), le processus finit par être tué sans trace dans les logs :
+    la page semble alors simplement ne plus répondre.
+    """
+    import matplotlib.pyplot as plt
+
+    st.pyplot(fig, width="stretch")
+    plt.close(fig)
