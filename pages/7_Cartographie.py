@@ -3,6 +3,7 @@ import streamlit as st
 from src.config import configure_page
 from src.data import chargement_session, telemetrie_pilote
 from src.ui import selections_courantes, selecteur_pilote_unique
+from src.navigation import lien_accueil
 from streamlit_extras.colored_header import colored_header
 
 
@@ -16,7 +17,7 @@ st.caption(
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 if not loaded:
     st.warning("Aucune session n'est chargée. Retournez à la page d'accueil.")
-    st.page_link("Home.py", label="🏠 Retour à la Home")
+    lien_accueil("🏠 Retour à la Home")
     st.stop()
 
 data = chargement_session(annee, grand_prix, session_type)

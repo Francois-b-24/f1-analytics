@@ -211,7 +211,8 @@ def selections_courantes(required: bool = True):
 
     if required and (annee is None or grand_prix is None or session_type is None or not loaded):
         st.info("Veuillez d’abord sélectionner et **charger** une session sur la page **Home**.")
-        st.page_link("Home.py", label="🏠 Aller à la page Home")
+        from .navigation import lien_accueil
+        lien_accueil()
         st.stop()
 
     return annee, grand_prix, session_type, loaded

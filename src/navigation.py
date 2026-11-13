@@ -47,6 +47,12 @@ _DECLARATION: tuple[tuple[str, str, str], ...] = (
 )
 
 
+# Page d'accueil courante, mémorisée au moment où la navigation est montée.
+# `st.page_link` exige un StreamlitPage sous `st.navigation` : un chemin de
+# fichier n'y est plus résolvable et lève StreamlitPageNotFoundError.
+_ACCUEIL: st.navigation | None = None
+
+
 def construire_pages(accueil) -> list[st.navigation]:
     """Construit la liste des pages, accueil en tête.
 
@@ -54,9 +60,33 @@ def construire_pages(accueil) -> list[st.navigation]:
     absents sont ignorés silencieusement plutôt que de casser toute la
     navigation : une page manquante ne doit pas rendre l'app inutilisable.
     """
-    pages = [st.Page(accueil, title="Home", icon="🏎️", default=True)]
+    global _ACCUEIL
+
+    _ACCUEIL = st.Page(accueil, title="Home", icon="🏎️", default=True)
+    pages = [_ACCUEIL]
     for fichier, titre, icone in _DECLARATION:
         chemin = _PAGES / fichier
         if chemin.is_file():
             pages.append(st.Page(chemin, title=titre, icon=icone))
     return pages
+
+
+def lien_accueil(label: str = "🏠 Aller à la page Home") -> None:
+    """Affiche un lien vers l'accueil, quel que soit le mode de navigation.
+
+    Sous ``st.navigation``, les pages sont identifiées par leur objet
+    ``StreamlitPage`` et non par leur chemin : ``st.page_link("Home.py")``
+    y lève ``StreamlitPageNotFoundError``. Cette fonction utilise l'objet
+    mémorisé, et retombe sur le chemin de fichier quand la navigation
+    implicite est active (aucune page déclarée).
+
+    Le lien est décoratif : son échec ne doit jamais interrompre la page qui
+    l'affiche, d'où le repli silencieux.
+    """
+    try:
+        if _ACCUEIL is not None:
+            st.page_link(_ACCUEIL, label=label)
+        else:
+            st.page_link(str(_RACINE / "Home.py"), label=label)
+    except Exception:  # noqa: BLE001 — un lien cassé ne doit pas casser la page
+        pass

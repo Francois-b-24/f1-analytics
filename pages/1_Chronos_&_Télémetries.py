@@ -7,6 +7,7 @@ from src.ui import selecteurs_pilotes, selections_courantes
 from src.data import chargement_session, tour_rapide_tel
 from src.utils import formatage_timedelta
 from src.analytics import delta_time_vs_distance
+from src.navigation import lien_accueil
 
 from streamlit_extras.colored_header import colored_header
 
@@ -20,7 +21,7 @@ st.caption("Comparaison des performances entre 2 pilotes possible.")
 annee, grand_prix, session_type, loaded = selections_courantes(required=True)
 if not loaded:
     st.warning("Aucune session n'est chargée. Retournez à l'accueil.")
-    st.page_link("Home.py", label="🏠 Retour à la Home")
+    lien_accueil("🏠 Retour à la Home")
     st.stop()
 
 # 2) Charger les données une seule fois (cache côté src.data)

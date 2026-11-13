@@ -92,3 +92,24 @@ def test_toutes_les_pages_sont_declarees():
     sur_disque = {p.name for p in (RACINE / "pages").glob("*.py")}
     manquants = sur_disque - declares
     assert not manquants, f"Pages non déclarées dans le routeur : {manquants}"
+
+
+def test_aucun_page_link_par_chemin():
+    """Aucun `st.page_link("Home.py")` ne subsiste dans l'app.
+
+    Sous `st.navigation`, les pages sont identifiées par leur objet
+    `StreamlitPage` : un chemin de fichier y lève
+    `StreamlitPageNotFoundError`. C'est ce qui cassait les dix onglets en
+    production dès qu'une page affichait son lien de retour à l'accueil.
+    `src/navigation.py` est exclu : il porte le repli documenté.
+    """
+    fautifs = []
+    for chemin in [RACINE / "Home.py", *(RACINE / "pages").glob("*.py"),
+                   *(RACINE / "src").glob("*.py")]:
+        if chemin.name == "navigation.py":
+            continue
+        if 'page_link("Home.py"' in chemin.read_text(encoding="utf-8"):
+            fautifs.append(chemin.name)
+    assert not fautifs, (
+        f"st.page_link par chemin dans : {fautifs}. Utiliser lien_accueil()."
+    )
