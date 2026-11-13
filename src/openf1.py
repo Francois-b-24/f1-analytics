@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -37,6 +38,65 @@ _ATTENTE_ENTRE_TENTATIVES = 1.5
 # observé). Le plafond évite qu'un quota mal annoncé ne fige l'application.
 _ATTENTE_QUOTA_DEFAUT = 5.0
 _ATTENTE_QUOTA_MAX = 20.0
+
+# Espacement minimal entre deux départs de requête vers OpenF1.
+#
+# L'API plafonne le débit et répond 429 quand plusieurs requêtes partent
+# ensemble. Cet espacement décale les départs des threads parallèles, ce qui
+# réduit le nombre de 429 immédiats.
+#
+# Portée réelle, mesurée en novembre 2026 (7 endpoints d'une session, 6 essais
+# par configuration, alternés A/B pour neutraliser la dérive de charge de
+# l'API) :
+#
+#   sans espacement   médiane 2,6 s | max 42,4 s | 2 endpoints perdus
+#   0,05 s            médiane 2,1 s | max 41,2 s | 3 endpoints perdus
+#
+# Autrement dit : l'espacement ne supprime pas les pics. Quand le quota est
+# atteint côté serveur, l'attente imposée (jusqu'à 20 s par `retry-after`,
+# parfois cumulée) domine tout le reste, et aucun espacement client n'y change
+# quoi que ce soit. Une mesure antérieure concluait à un gain net ; elle
+# reposait sur trois essais consécutifs non alternés, donc sur la charge de
+# l'API à cet instant plutôt que sur l'effet du code.
+#
+# On conserve le mécanisme — il est peu coûteux et lisse les départs — mais
+# sans lui prêter un gain qu'il n'a pas. Le vrai levier contre les pics est
+# ailleurs : moins de requêtes (cache) ou tolérance à l'échec partiel.
+#
+# Ne pas augmenter cette valeur sans refaire une mesure alternée : au-delà de
+# 0,1 s, l'espacement s'ajoute au temps de chargement sans contrepartie.
+_INTERVALLE_MIN_REQUETES = 0.05
+
+_verrou_debit = threading.Lock()
+_dernier_depart = 0.0
+
+
+def _attendre_son_tour() -> None:
+    """Espace les départs de requêtes d'au moins `_INTERVALLE_MIN_REQUETES`.
+
+    Sérialise l'instant de départ sans sérialiser l'attente réseau : les
+    threads parallèles gardent leur intérêt, ils ne partent simplement pas
+    tous au même instant.
+    """
+    global _dernier_depart
+    with _verrou_debit:
+        attente = _INTERVALLE_MIN_REQUETES - (time.monotonic() - _dernier_depart)
+        _dernier_depart = time.monotonic()
+    # Hors du verrou : un thread qui patiente ne doit pas bloquer les autres
+    # dans le calcul de leur propre tour.
+    if attente > 0:
+        time.sleep(attente)
+
+
+def reinitialiser_debit() -> None:
+    """Oublie le dernier départ enregistré.
+
+    Utile aux tests : `_dernier_depart` est un état de module, donc un test
+    qui émet une requête décalerait la temporisation du suivant.
+    """
+    global _dernier_depart
+    _dernier_depart = 0.0
+
 
 # Nombre de requêtes menées en parallèle (télémétrie, métadonnées).
 # Mesuré sur une grille complète : le facteur limitant est le temps de réponse
@@ -78,6 +138,7 @@ def _get(endpoint: str, **params) -> list[dict]:
     derniere: Exception | None = None
 
     for tentative in range(1, _TENTATIVES + 1):
+        _attendre_son_tour()
         try:
             requete = urllib.request.Request(
                 url, headers={"User-Agent": "f1-analytics", "Accept": "application/json"}
