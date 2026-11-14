@@ -3,7 +3,6 @@ import streamlit as st
 from src.config import configure_page
 from src.data import telemetrie_pilote
 from src.ui import afficher_figure, page_session, selecteur_pilote_unique
-from streamlit_extras.colored_header import colored_header
 
 
 configure_page("F1 Analytics – Cartographie")
@@ -37,10 +36,10 @@ if tel is None or tel.empty:
     st.warning(f"Télémétrie non disponible pour {pilote} sur cette session.")
     st.stop()
 
-colored_header("Vitesse sur le tour le plus rapide", description=None, color_name="blue-70")
+st.markdown("### " + "Vitesse sur le tour le plus rapide")
 fig = figure_carte_vitesse(tel)
 afficher_figure(fig)
 
-colored_header("Changements de rapport sur le tour le plus rapide", description=None, color_name="blue-70")
+st.markdown("### " + "Changements de rapport sur le tour le plus rapide")
 fig = figure_carte_rapports(tel)
 afficher_figure(fig)

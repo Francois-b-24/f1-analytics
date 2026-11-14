@@ -9,7 +9,6 @@ dependencies = [
     "pandas",
     "matplotlib",
     "plotly",
-    "streamlit-extras",
     "numpy>=2.0.2",
 ]
 

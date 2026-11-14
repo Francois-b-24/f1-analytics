@@ -20,8 +20,6 @@ import logging
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from streamlit_extras.add_vertical_space import add_vertical_space
-from streamlit_extras.colored_header import colored_header
 
 from .data import chargement_session
 from .theme import COMPOSES, ORDRE_COMPOSES
@@ -112,7 +110,7 @@ def rendre() -> None:
     pilotes = data["pilotes"]
     resultats = data["resultats"]
 
-    colored_header("Overview", description=None, color_name="blue-70")
+    st.markdown("### Overview")
     c1, c2, c3 = st.columns(3)
     total_laps = int(tours["LapNumber"].max()) if not tours.empty else 0
     with c1:
@@ -122,8 +120,8 @@ def rendre() -> None:
     with c3:
         st.metric("Grand-Prix", grand_prix)
 
-    add_vertical_space(1)
-    colored_header("Meilleur tour de la session", description=None, color_name="blue-70")
+    st.write("")
+    st.markdown("### Meilleur tour de la session")
     if "LapTime" in tours and tours["LapTime"].notna().any():
         meilleur = tours.loc[tours["LapTime"].idxmin()]
         b1, b2, b3 = st.columns(3)
@@ -136,7 +134,7 @@ def rendre() -> None:
     else:
         st.info("Meilleur tour indisponible.")
 
-    colored_header("Chronos — Top 10 meilleurs tours", description=None, color_name="blue-70")
+    st.markdown("### Chronos — Top 10 meilleurs tours")
     if not tours.empty and "LapTime" in tours:
         top = (tours.sort_values("LapTime")
                     .loc[tours["LapTime"].notna(),
@@ -151,8 +149,8 @@ def rendre() -> None:
     else:
         st.info("Pas de données de tours.")
 
-    add_vertical_space(1)
-    colored_header("Répartition des composés pneus", description=None, color_name="blue-70")
+    st.write("")
+    st.markdown("### Répartition des composés pneus")
     if "Compound" in tours:
         comp = (tours.dropna(subset=["Compound"])
                      .groupby(["Driver", "Compound"]).size()
@@ -171,10 +169,9 @@ def rendre() -> None:
     else:
         st.info("Pas d'information pneus disponible.")
 
-    add_vertical_space(1)
-    colored_header("Résultats de la course",
-                   description="Résultats officiels si disponibles",
-                   color_name="blue-70")
+    st.write("")
+    st.markdown("### Résultats de la course")
+    st.caption("Résultats officiels si disponibles")
     if not resultats.empty:
         colonnes = [c for c in ("Position", "BroadcastName", "DriverNumber",
                                 "TeamName", "Points", "Status", "Time",

@@ -4,7 +4,6 @@ import plotly.express as px
 from src.config import configure_page
 from src.ui import page_session
 from src.analytics import sector_times_long, sector_best_per_driver
-from streamlit_extras.colored_header import colored_header
 
 
 configure_page("F1 Analytics – Analyse par secteur")
@@ -36,7 +35,8 @@ if not selected:
 # ---------------------------------------------------------------------------
 # Tableau des meilleurs temps par secteur
 # ---------------------------------------------------------------------------
-colored_header("Meilleurs temps par secteur", description="Delta vs meilleur pilote du secteur", color_name="blue-70")
+st.markdown("### " + "Meilleurs temps par secteur")
+st.caption("Delta vs meilleur pilote du secteur")
 best = sector_best_per_driver(tours[tours["Driver"].isin(selected)])
 if best.empty:
     st.info("Données insuffisantes.")
@@ -53,7 +53,7 @@ else:
 # ---------------------------------------------------------------------------
 # Distribution des temps par secteur (box-plot)
 # ---------------------------------------------------------------------------
-colored_header("Distribution des temps par secteur", description=None, color_name="blue-70")
+st.markdown("### " + "Distribution des temps par secteur")
 long = sector_times_long(tours, drivers=selected)
 if long.empty:
     st.info("Données insuffisantes pour la distribution.")
@@ -72,7 +72,7 @@ else:
     st.plotly_chart(fig_box, use_container_width=True)
 
     # Évolution des temps de secteur par numéro de tour
-    colored_header("Évolution des temps par secteur", description=None, color_name="blue-70")
+    st.markdown("### " + "Évolution des temps par secteur")
     fig_evo = px.line(
         long.sort_values("LapNumber"),
         x="LapNumber",

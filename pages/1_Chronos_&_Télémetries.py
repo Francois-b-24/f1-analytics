@@ -8,7 +8,6 @@ from src.data import tour_rapide_tel
 from src.utils import formatage_timedelta
 from src.analytics import delta_time_vs_distance
 
-from streamlit_extras.colored_header import colored_header
 
 
 configure_page("F1 Analytics – Tours & Chronos")
@@ -26,7 +25,7 @@ with st.sidebar:
 
 subset = tours[tours['Driver'].isin([d for d in [pilote_1, pilote_2] if d])].copy()
 
-colored_header("Évolution des temps au tour (en secondes)", description=None, color_name="blue-70")
+st.markdown("### " + "Évolution des temps au tour (en secondes)")
 if not subset.empty and subset['LapSeconds'].notna().any():
     fig = px.line(subset, x='LapNumber', y='LapSeconds', color='Driver', labels={'LapSeconds': 'Temps (s)'})
     fig.update_xaxes(title_text="Tours")
@@ -50,7 +49,7 @@ def _get_best_lap_no(d):
     return None
 
 
-colored_header("Télémétries sur le tour le plus rapide", description=None, color_name="blue-70")
+st.markdown("### " + "Télémétries sur le tour le plus rapide")
 # La télémétrie est chargée à la demande, uniquement pour le(s) pilote(s)
 # affiché(s). `best_laps` indique quels pilotes ont un tour exploitable.
 _best_laps = data.get("best_laps", {})
@@ -106,10 +105,9 @@ else:
                 st.metric("Différence", formatage_timedelta(diff))
 
         if pilote_2 and tel_2 is not None:
-            colored_header(
-                "Delta time cumulé (référence : pilote 1)",
-                description="Delta > 0 ⇒ pilote 2 en retard ; pentes = zones d'avantage.",
-                color_name="blue-70",
+            st.markdown("### Delta time cumulé (référence : pilote 1)")
+            st.caption(
+                "Delta > 0 ⇒ pilote 2 en retard ; pentes = zones d'avantage."
             )
             delta_df = delta_time_vs_distance(tel_1, tel_2)
             if not delta_df.empty:
@@ -139,7 +137,7 @@ else:
             st.code(traceback.format_exc())
 
 
-colored_header("Informations par tour un pilote", description=None, color_name="blue-70")
+st.markdown("### " + "Informations par tour un pilote")
 colonnes = ['Driver', 'LapNumber', 'LapTime', 'LapSeconds', 'Compound', 'Stint', 'IsPersonalBest', 'PitOutTime', 'PitInTime']
 table = subset[[c for c in colonnes if c in subset.columns]].copy()
 if 'LapTime' in table:

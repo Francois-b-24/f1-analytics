@@ -1,7 +1,6 @@
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from streamlit_extras.colored_header import colored_header
 
 from src.analytics import (
     DEPLOY_TAPER_END_KMH,
@@ -94,11 +93,8 @@ if tel is None or tel.empty:
 # ---------------------------------------------------------------------------
 # Indicateurs dérivés du tour le plus rapide
 # ---------------------------------------------------------------------------
-colored_header(
-    "Indicateurs du tour le plus rapide",
-    description=f"{pilote} — estimations dérivées de la télémétrie",
-    color_name="blue-70",
-)
+st.markdown("### " + "Indicateurs du tour le plus rapide")
+st.caption(f"{pilote} — estimations dérivées de la télémétrie")
 
 resume = resume_proxys_energie(tel)
 
@@ -146,11 +142,8 @@ st.caption(
 # ---------------------------------------------------------------------------
 # Profil de vitesse et seuils réglementaires
 # ---------------------------------------------------------------------------
-colored_header(
-    "Profil de vitesse et seuils de déploiement",
-    description="Où le déploiement électrique décroît selon la réglementation 2026",
-    color_name="blue-70",
-)
+st.markdown("### " + "Profil de vitesse et seuils de déploiement")
+st.caption("Où le déploiement électrique décroît selon la réglementation 2026")
 
 if {"Distance", "Speed"}.issubset(tel.columns):
     fig = go.Figure()
@@ -193,11 +186,8 @@ else:
 # ---------------------------------------------------------------------------
 # Découpage en phases
 # ---------------------------------------------------------------------------
-colored_header(
-    "Phases de freinage et de traction",
-    description="Fenêtres de récupération et de déploiement estimées",
-    color_name="blue-70",
-)
+st.markdown("### " + "Phases de freinage et de traction")
+st.caption("Fenêtres de récupération et de déploiement estimées")
 
 phases = phases_telemetrie(tel)
 if phases.empty:
@@ -240,11 +230,8 @@ else:
 # ---------------------------------------------------------------------------
 # Comparaison entre pilotes
 # ---------------------------------------------------------------------------
-colored_header(
-    "Comparaison entre pilotes",
-    description="Styles de pilotage au prisme des proxys énergétiques",
-    color_name="blue-70",
-)
+st.markdown("### " + "Comparaison entre pilotes")
+st.caption("Styles de pilotage au prisme des proxys énergétiques")
 
 # Défaut restreint à 4 pilotes : chaque pilote comparé nécessite une requête
 # de télémétrie à la demande, donc un défaut trop large rallongerait l'ouverture

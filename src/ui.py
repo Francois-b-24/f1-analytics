@@ -4,13 +4,17 @@ from datetime import datetime
 
 import pandas as pd
 import streamlit as st
-from streamlit_extras.colored_header import colored_header
 
 from .openf1 import PREMIERE_SAISON
 
-# Logger obtenu par son nom plutôt qu'importé de `src.config` : ce module y
-# tire fastf1 et l'initialisation de Sentry, chaîne d'imports inutile ici et
-# qui a fait échouer l'import de `src.ui` en production.
+# Ce module est importé par le routeur, donc sur le chemin critique de toutes
+# les pages : il reste volontairement limité aux dépendances garanties.
+#
+# `streamlit_extras` en a été retiré — l'import de ce module échouait en
+# production (`ImportError`) alors qu'il réussissait en local sous 3.11 comme
+# 3.13 ; il n'y servait que deux en-têtes décoratifs, remplacés par du
+# Streamlit natif. `src.config` en a été retiré aussi : il y tire fastf1 et
+# l'initialisation de Sentry pour un seul appel de log.
 logger = logging.getLogger("f1_analytics.ui")
 
 
@@ -223,11 +227,8 @@ def selecteur_pilote_unique(pilotes: list[str]) -> str:
     str
         Le code du pilote sélectionné, ou "" si aucun pilote disponible.
     """
-    colored_header(
-        "Pilote",
-        description="Choisissez un pilote",
-        color_name="blue-70",
-    )
+    st.markdown("### Pilote")
+    st.caption("Choisissez un pilote")
     if not pilotes:
         st.caption("Aucun pilote disponible")
         return ""
@@ -254,11 +255,8 @@ def selecteurs_pilotes(pilotes: list[str]):
     tuple
         (pilote_1, pilote_2) où pilote_2 peut être une chaîne vide.
     """
-    colored_header(
-        "Pilotes",
-        description="Choisissez un ou deux pilotes à comparer",
-        color_name="blue-70",
-    )
+    st.markdown("### Pilotes")
+    st.caption("Choisissez un ou deux pilotes à comparer")
     # Par défaut, pilote 1 : HAM si dispo
     default1 = "HAM" if "HAM" in pilotes else (pilotes[0] if pilotes else "")
     if pilotes:
