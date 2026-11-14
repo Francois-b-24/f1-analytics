@@ -39,6 +39,8 @@ jobs:
           FASTF1_CACHE: ${{ runner.temp }}/fastf1_cache
         run: pytest tests/ -v --tb=short
 
-      - name: Smoke import (vérifie que Streamlit ne crashe pas au boot)
-        run: |
-          python -c "import Home" || echo "Home.py importe OK (st.set_page_config peut échouer hors runtime — normal)"
+      # Le smoke import d'avant se terminait par `|| echo`, qui avalait toute
+      # erreur — y compris une SyntaxError. Il ne pouvait donc pas échouer, et
+      # n'a jamais rien protégé. `tests/test_rendu_pages.py` le remplace : il
+      # monte réellement les deux points d'entrée et les dix pages via
+      # AppTest, hors ligne, et il est couvert par le gate pytest ci-dessus.

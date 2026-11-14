@@ -13,13 +13,13 @@ Ces tests vérifient donc ce qu'aucun test ne couvrait : que tout point d'entré
 supporté existe à la racine, à côté de `pages/`, et que les dix pages restent
 découvrables. Ils sont hors ligne — aucun appel réseau.
 """
+import re
 from pathlib import Path
 
 import pytest
 
 RACINE = Path(__file__).resolve().parent.parent
 POINTS_ENTREE = ("Home.py", "streamlit_app.py")
-NB_PAGES_ATTENDU = 10
 
 
 @pytest.mark.parametrize("nom", POINTS_ENTREE)
@@ -42,10 +42,20 @@ def test_pages_adjacentes_au_point_entree(nom):
     )
 
 
-def test_les_dix_pages_sont_presentes():
-    """Les dix onglets attendus sont découvrables."""
+def test_les_pages_sur_disque_correspondent_a_la_declaration():
+    """Autant de pages sur disque que d'entrées déclarées.
+
+    L'égalité avec `_DECLARATION` est préférée à un nombre en dur : elle reste
+    vraie si une page est ajoutée, et elle casse pour la bonne raison — un
+    écart entre le disque et le registre — plutôt que sur un compteur oublié.
+    """
+    from src.navigation import _DECLARATION
+
     pages = sorted(p.name for p in (RACINE / "pages").glob("*.py"))
-    assert len(pages) == NB_PAGES_ATTENDU, f"Pages trouvées : {pages}"
+    assert len(pages) == len(_DECLARATION), (
+        f"{len(pages)} page(s) sur disque pour {len(_DECLARATION)} déclarée(s). "
+        f"Sur disque : {pages}"
+    )
 
 
 def test_navigation_explicite_declaree():
@@ -92,6 +102,51 @@ def test_toutes_les_pages_sont_declarees():
     sur_disque = {p.name for p in (RACINE / "pages").glob("*.py")}
     manquants = sur_disque - declares
     assert not manquants, f"Pages non déclarées dans le routeur : {manquants}"
+
+
+def test_aucune_page_declaree_ne_manque_sur_disque():
+    """Aucune entrée déclarée ne pointe sur un fichier absent.
+
+    `construire_pages` ignore silencieusement un fichier manquant : un
+    renommage ferait donc disparaître un onglet sans la moindre erreur, dans
+    les logs comme à l'écran. C'est exactement le symptôme déjà vécu en
+    production, et le sens de contrôle que ne couvrait aucun test.
+    """
+    from src.navigation import _DECLARATION
+
+    manquants = [
+        nom for nom, _, _ in _DECLARATION
+        if not (RACINE / "pages" / nom).is_file()
+    ]
+    assert not manquants, (
+        f"Déclarées mais absentes de pages/ : {manquants}. Ces onglets "
+        f"disparaîtraient de la navigation sans erreur."
+    )
+
+
+def test_aucune_cle_de_widget_dupliquee():
+    """Deux widgets ne partagent jamais la même `key`.
+
+    Rendre deux fois la même clé dans un run lève
+    `StreamlitDuplicateElementKey`, une exception non rattrapée : la page
+    part en erreur. Le risque est réel dès qu'un widget vit dans le routeur
+    (donc rendu sur toutes les pages) et qu'une page rend le même widget.
+    """
+    motif = re.compile(r"""\bkey\s*=\s*["']([^"']+)["']""")
+    vues: dict[str, str] = {}
+    doublons: list[str] = []
+
+    fichiers = [RACINE / "Home.py", RACINE / "streamlit_app.py",
+                *sorted((RACINE / "pages").glob("*.py")),
+                *sorted((RACINE / "src").glob("*.py"))]
+    for chemin in fichiers:
+        for cle in motif.findall(chemin.read_text(encoding="utf-8")):
+            if cle in vues:
+                doublons.append(f"{cle!r} ({vues[cle]} et {chemin.name})")
+            else:
+                vues[cle] = chemin.name
+
+    assert not doublons, f"Clés de widget en double : {doublons}"
 
 
 def test_aucun_page_link_par_chemin():
