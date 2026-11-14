@@ -12,7 +12,26 @@ point d'entrée et page — et se relançait lui-même par `runpy` au milieu de 
 propres imports, ce qui cassait l'accueil en production.
 """
 import runpy
+import sys
+import traceback
 from pathlib import Path
+
+import streamlit as st
+
+# --- DIAGNOSTIC TEMPORAIRE (à retirer) -----------------------------------
+# Streamlit Cloud masque le message des ImportError. On importe src.ui ici,
+# avant toute autre chose, et on affiche la trace complète à l'écran.
+_RACINE = str(Path(__file__).resolve().parent)
+if _RACINE not in sys.path:
+    sys.path.insert(0, _RACINE)
+try:
+    import src.ui  # noqa: F401
+except BaseException:
+    st.error("DIAGNOSTIC — import de src.ui impossible :")
+    st.code(traceback.format_exc())
+    st.caption(f"python={sys.version} | sys.path[0:3]={sys.path[0:3]}")
+    st.stop()
+# --- fin du diagnostic ---------------------------------------------------
 
 runpy.run_path(
     str(Path(__file__).resolve().parent / "streamlit_app.py"),

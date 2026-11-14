@@ -24,26 +24,12 @@ Les deux points d'entrée restent équivalents :
 """
 import streamlit as st
 
-import traceback as _tb
-
 from src.config import configure_page_home
 from src.accueil import rendre as rendre_accueil
 from src.navigation import construire_pages
 from src.ui import selecteur_session_global
 
 configure_page_home("F1 Analytics")
-
-# --- DIAGNOSTIC TEMPORAIRE (à retirer) -----------------------------------
-# La production lève ImportError sur `from .ui import ...` sans jamais
-# divulguer le message. On le capture et on l'affiche.
-try:
-    import src.ui as _diag_ui
-    st.success(f"src.ui importé — attributs : {len([a for a in dir(_diag_ui) if not a.startswith('_')])}")
-except BaseException:
-    st.error("DIAGNOSTIC — échec d'import de src.ui :")
-    st.code(_tb.format_exc())
-    st.stop()
-# --- fin du diagnostic ---------------------------------------------------
 
 pages = st.navigation(construire_pages(rendre_accueil))
 
