@@ -111,7 +111,59 @@ n'y sont pas transposables telles quelles. Trois couches doivent rester
 cohérentes : `src/theme.py`, `f1_theme.css` (bloc `:root`) et
 `.streamlit/config.toml`.
 
-### Contraintes Streamlit
+### Navigation et disponibilité des pages
+
+`streamlit_app.py` est le routeur : il monte `st.navigation` à partir de
+`src/navigation.py`, puis rend **le sélecteur de session** (`src/ui.py::
+selecteur_session_global`) dans la barre latérale avant `.run()`. Trois règles
+en découlent :
+
+- **Le sélecteur ne doit être rendu qu'à cet endroit.** Le rendre aussi dans
+  une page dupliquerait ses clés (`sb_annee`, `sb_gp`, `sb_type`) dans le même
+  run et lèverait `StreamlitDuplicateElementKey` — exception non rattrapée qui
+  met la page en erreur. `tests/test_points_entree.py` interdit toute clé de
+  widget en double.
+- **Les pages ne chargent plus la session elles-mêmes** : `page_session()`
+  (`src/ui.py`) porte l'en-tête, les sélections et le chargement, et retourne
+  le dict de `chargement_session`. Ne pas réintroduire le bloc
+  `selections_courantes` + `if not loaded` + `chargement_session` : le test de
+  `loaded` est mort, `required=True` appelant déjà `st.stop()`.
+- **`_SECTIONS` est une vue d'affichage**, `_DECLARATION` reste le registre.
+  Une page absente des sections serait injoignable sans erreur ; un test
+  l'interdit.
+
+`AUTO_CHARGEMENT` (`src/ui.py`) charge la dernière session terminée au premier
+rendu, une seule fois par session navigateur, inactif sous pytest et
+désactivable par `F1_SANS_AUTO_CHARGEMENT=1`. Le passer à `False` restaure la
+sélection explicite sans autre modification.
+
+**Les deux points d'entrée doivent rester équivalents** : le « Main file path »
+est configuré chez Streamlit Cloud, hors du dépôt, et c'est la cause racine de
+la panne historique. Vérifier `streamlit run streamlit_app.py` **et**
+`streamlit run Home.py`.
+
+## Vérifier avant de pousser
+
+La CI et AppTest ne suffisent pas : AppTest ne rend ni Plotly ni matplotlib, et
+c'est ce qui avait donné un faux feu vert pendant que la production servait une
+page blanche. Vérifier au navigateur, et sous la version exacte de la prod —
+`uv run` installe Streamlit 1.51 et réécrit `uv.lock`, alors que
+`requirements.txt` épingle 1.50.0 :
+
+```bash
+uv venv --python 3.11 /tmp/venv-prod
+VIRTUAL_ENV=/tmp/venv-prod uv pip install -r requirements.txt pytest==8.3.4
+/tmp/venv-prod/bin/python -m pytest tests/ -q --ignore=tests/test_data_smoke.py
+uv tool run ruff@0.6.9 check .          # version de la CI, lint bloquant
+/tmp/venv-prod/bin/python -m streamlit run streamlit_app.py --server.headless true
+```
+
+Sonder ensuite chaque route dans un **contexte navigateur neuf** (un onglet
+réutilisé masque l'auto-chargement) et vérifier : sections de nav présentes,
+sélecteur présent, session chargée, barre de contexte affichée, aucune trace
+d'exception. `git status` ne doit pas montrer `uv.lock`.
+
+## Contraintes Streamlit
 
 - `st.set_page_config()` doit précéder tout autre appel `st.*` : d'où
   l'ignorance de `E402` sur `Home.py` et `pages/*.py` dans `pyproject.toml`.

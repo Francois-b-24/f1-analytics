@@ -94,13 +94,15 @@ est présenté comme une estimation, sans vérité terrain pour le valider.
 
 ```
 f1-analytics/
-├─ Home.py                       # Point d'entrée Streamlit (overview + KPIs)
+├─ streamlit_app.py              # Routeur : navigation explicite + sélecteur de session
+├─ Home.py                       # Accueil (overview + KPIs) ; délègue au routeur si lancé seul
 ├─ src/                          # Modules internes
 │  ├─ config.py                  # Setup pages, logging, Sentry, thème
+│  ├─ navigation.py              # Déclaration des pages et des sections de la sidebar
 │  ├─ openf1.py                  # Client HTTP OpenF1 (tous les appels réseau)
 │  ├─ adaptateurs.py             # OpenF1 -> DataFrames de l'application
 │  ├─ data.py                    # Chargement session, classements, figures
-│  ├─ ui.py                      # Sélecteurs (saison, GP, type session, pilotes)
+│  ├─ ui.py                      # Sélecteur de session global, préambule de page, sélecteurs pilotes
 │  ├─ analytics.py               # Calculs (dégradation, delta, secteurs, proxys énergie)
 │  ├─ theme.py                   # Palette validée + template Plotly (source de vérité couleurs)
 │  └─ utils.py                   # Helpers (formatage timedelta, secs)
@@ -115,7 +117,7 @@ f1-analytics/
 │  ├─ 8_Exports_de_donnees.py
 │  ├─ 9_Secteurs.py
 │  └─ 10_Energie_&_2026.py
-├─ tests/                        # pytest (analytics, figures, utils, smoke)
+├─ tests/                        # pytest (analytics, figures, utils, rendu des pages, smoke)
 ├─ probe-action/                 # GitHub Action keep-alive (Puppeteer)
 ├─ .github/workflows/            # CI + probe
 ├─ .streamlit/config.toml        # Conf Streamlit (theme, logger, server)
