@@ -73,15 +73,39 @@ def test_navigation_explicite_declaree():
     assert "construire_pages" in source
 
 
-def test_home_delegue_au_routeur_si_lance_directement():
-    """Lancé directement, Home.py délègue au routeur.
+def test_home_delegue_au_routeur():
+    """`Home.py` délègue au routeur, sans rendre quoi que ce soit lui-même.
 
-    Sans cela, un hébergeur configuré sur Home.py rendrait l'accueil seul,
+    Un hébergeur configuré sur `Home.py` doit obtenir la même application que
+    s'il lançait le routeur : sans délégation, il servirait l'accueil seul,
     sans barre latérale — le symptôme exact observé en production.
+
+    Ce fichier ne doit pas non plus rendre l'accueil. Tant qu'il le faisait, il
+    cumulait deux rôles et se relançait par `runpy` au milieu de ses propres
+    imports : l'accueil levait alors `ImportError` puis `AttributeError` en
+    production, sans que lint, tests ni CI le voient. Le rendu vit dans
+    `src/accueil.py`.
     """
     source = (RACINE / "Home.py").read_text(encoding="utf-8")
-    assert '__name__ == "__main__"' in source
-    assert "streamlit_app.py" in source
+    assert "streamlit_app.py" in source, "Home.py doit déléguer au routeur"
+    assert "st.metric" not in source and "colored_header" not in source, (
+        "Home.py ne doit plus rendre l'accueil : ce rôle appartient à "
+        "src/accueil.py."
+    )
+
+
+def test_le_routeur_rend_l_accueil_par_import():
+    """Le routeur importe le rendu de l'accueil, sans `runpy`.
+
+    `runpy.run_path` réexécutait un fichier déjà en cours d'exécution, d'où la
+    réentrance qui cassait l'accueil en production.
+    """
+    source = (RACINE / "streamlit_app.py").read_text(encoding="utf-8")
+    assert "from src.accueil import" in source
+    assert "runpy" not in source, (
+        "Le routeur ne doit plus exécuter de fichier par runpy : l'accueil "
+        "est un module importé."
+    )
 
 
 def test_navigation_ancre_les_chemins_sur_la_racine():

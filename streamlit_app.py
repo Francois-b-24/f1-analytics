@@ -22,32 +22,16 @@ Les deux points d'entrée restent équivalents :
     streamlit run Home.py
     streamlit run streamlit_app.py
 """
-import runpy
-from pathlib import Path
-
 import streamlit as st
 
 from src.config import configure_page_home
+from src.accueil import rendre as rendre_accueil
 from src.navigation import construire_pages
 from src.ui import selecteur_session_global
 
 configure_page_home("F1 Analytics")
 
-_HOME = Path(__file__).resolve().parent / "Home.py"
-
-
-def _accueil() -> None:
-    """Rend la page d'accueil.
-
-    ``Home.py`` est exécuté comme un script plutôt qu'importé : il s'exécute
-    de haut en bas et n'expose aucune fonction de rendu. ``run_name`` n'est
-    pas ``"__main__"`` ici — l'accueil est une page parmi d'autres, et
-    ``set_page_config()`` a déjà été appelé ci-dessus.
-    """
-    runpy.run_path(str(_HOME), run_name="__page__")
-
-
-pages = st.navigation(construire_pages(_accueil))
+pages = st.navigation(construire_pages(rendre_accueil))
 
 # Rendu ici, et nulle part ailleurs : la barre latérale appartient au routeur,
 # donc le sélecteur existe sur toutes les pages et ses clés ne peuvent pas
