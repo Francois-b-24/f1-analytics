@@ -124,6 +124,43 @@ def test_aucune_page_declaree_ne_manque_sur_disque():
     )
 
 
+def test_chaque_page_figure_dans_exactement_une_section():
+    """Le regroupement de la barre latérale couvre toutes les pages, sans doublon.
+
+    Les sections sont une vue d'affichage : une page absente du regroupement
+    disparaîtrait de la navigation sans erreur — le symptôme déjà vécu en
+    production — et une page citée deux fois s'afficherait deux fois.
+    """
+    from src.navigation import _DECLARATION, _SECTIONS
+
+    declarees = [nom for nom, _, _ in _DECLARATION]
+    groupees = [nom for _, fichiers in _SECTIONS for nom in fichiers]
+
+    assert sorted(groupees) == sorted(declarees), (
+        f"Absentes des sections : {sorted(set(declarees) - set(groupees))} ; "
+        f"inconnues de _DECLARATION : {sorted(set(groupees) - set(declarees))}"
+    )
+    doublons = [n for n in set(groupees) if groupees.count(n) > 1]
+    assert not doublons, f"Pages citées dans plusieurs sections : {doublons}"
+
+
+def test_navigation_groupee_contient_accueil_et_toutes_les_pages():
+    """`construire_pages` renvoie des sections non vides incluant l'accueil."""
+    from src.navigation import _DECLARATION, construire_pages
+
+    groupes = construire_pages(lambda: None)
+    assert isinstance(groupes, dict) and groupes, "sections attendues"
+    assert all(pages for pages in groupes.values()), "aucune section ne doit être vide"
+
+    # `StreamlitPage.title` n'est pas lisible hors contexte d'exécution
+    # Streamlit : on compte les pages, sans inspecter leurs attributs.
+    total = sum(len(pages) for pages in groupes.values())
+    assert total == len(_DECLARATION) + 1, (
+        f"{total} entrée(s) de navigation pour {len(_DECLARATION)} page(s) "
+        f"déclarée(s) plus l'accueil"
+    )
+
+
 def test_aucune_cle_de_widget_dupliquee():
     """Deux widgets ne partagent jamais la même `key`.
 

@@ -34,7 +34,7 @@ _PAGES = _RACINE / "pages"
 # (fichier, libellé, icône). L'ordre fixe celui de la barre latérale et
 # reprend la numérotation historique des fichiers.
 _DECLARATION: tuple[tuple[str, str, str], ...] = (
-    ("1_Chronos_&_Télémetries.py", "Chronos & Télémetries", "⏱️"),
+    ("1_Chronos_&_Télémetries.py", "Chronos & télémétries", "⏱️"),
     ("2_Performances.py", "Performances", "📈"),
     ("3_Pneus_&_strategies.py", "Pneus & stratégies", "🛞"),
     ("4_Meteo.py", "Météo", "🌦️"),
@@ -47,28 +47,92 @@ _DECLARATION: tuple[tuple[str, str, str], ...] = (
 )
 
 
+# Regroupement thématique de la barre latérale.
+#
+# Dix onglets à plat se lisaient mal. Les sections suivent le déroulé d'un
+# week-end : ce qui s'est passé, qui était rapide, comment la course s'est
+# jouée, puis l'exploration technique.
+#
+# C'est une vue d'affichage, pas un registre : `_DECLARATION` reste la source
+# de vérité et ses tests restent inchangés. Les fichiers ne sont ni renommés
+# ni déplacés — c'est un renommage de pages qui avait cassé la production.
+_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Le week-end", (
+        "5_Classements.py",
+        "4_Meteo.py",
+    )),
+    ("Performance", (
+        "1_Chronos_&_Télémetries.py",
+        "2_Performances.py",
+        "9_Secteurs.py",
+    )),
+    ("Stratégie", (
+        "3_Pneus_&_strategies.py",
+        "6_Pitstops.py",
+    )),
+    ("Technique & données", (
+        "7_Cartographie.py",
+        "10_Energie_&_2026.py",
+        "8_Exports_de_donnees.py",
+    )),
+)
+
+
 # Page d'accueil courante, mémorisée au moment où la navigation est montée.
 # `st.page_link` exige un StreamlitPage sous `st.navigation` : un chemin de
 # fichier n'y est plus résolvable et lève StreamlitPageNotFoundError.
 _ACCUEIL: st.navigation | None = None
 
 
-def construire_pages(accueil) -> list[st.navigation]:
-    """Construit la liste des pages, accueil en tête.
+def construire_pages(accueil) -> dict[str, list[st.navigation]]:
+    """Construit les pages groupées par section, accueil en tête.
 
     ``accueil`` est le callable rendant la page d'accueil. Les fichiers
     absents sont ignorés silencieusement plutôt que de casser toute la
     navigation : une page manquante ne doit pas rendre l'app inutilisable.
+
+    Retourne un dict section → pages, accepté par ``st.navigation``. La page
+    par défaut est cherchée dans toutes les sections, donc l'accueil reste
+    celle qui s'ouvre. Les sections vides sont écartées : elles afficheraient
+    un titre sans contenu.
+
+    Une page déclarée dans ``_DECLARATION`` mais absente de ``_SECTIONS``
+    serait injoignable ; elle est rattachée à la dernière section plutôt que
+    perdue, et ``tests/test_points_entree.py`` interdit ce cas de figure.
     """
     global _ACCUEIL
 
     _ACCUEIL = st.Page(accueil, title="Home", icon="🏎️", default=True)
-    pages = [_ACCUEIL]
-    for fichier, titre, icone in _DECLARATION:
+    titres = {fichier: (titre, icone) for fichier, titre, icone in _DECLARATION}
+
+    def _page(fichier: str):
         chemin = _PAGES / fichier
-        if chemin.is_file():
-            pages.append(st.Page(chemin, title=titre, icon=icone))
-    return pages
+        if not chemin.is_file() or fichier not in titres:
+            return None
+        titre, icone = titres[fichier]
+        return st.Page(chemin, title=titre, icon=icone)
+
+    groupes: dict[str, list[st.navigation]] = {}
+    classes: set[str] = set()
+    for section, fichiers in _SECTIONS:
+        pages = [p for p in (_page(f) for f in fichiers) if p is not None]
+        classes.update(fichiers)
+        if pages:
+            groupes[section] = pages
+
+    # Filet : aucune page déclarée ne doit rester hors navigation.
+    oubliees = [p for p in (_page(f) for f, _, _ in _DECLARATION
+                            if f not in classes) if p is not None]
+    if oubliees and groupes:
+        groupes[list(groupes)[-1]].extend(oubliees)
+    elif oubliees:
+        groupes["Pages"] = oubliees
+
+    # L'accueil ouvre la première section plutôt qu'une section à lui seul.
+    premiere = next(iter(groupes), "Le week-end")
+    ordonnees = {premiere: [_ACCUEIL, *groupes.get(premiere, [])]}
+    ordonnees.update({k: v for k, v in groupes.items() if k != premiere})
+    return ordonnees
 
 
 def lien_accueil(label: str = "🏠 Aller à la page Home") -> None:
