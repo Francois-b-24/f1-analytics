@@ -22,6 +22,36 @@ RACINE = Path(__file__).resolve().parent.parent
 POINTS_ENTREE = ("Home.py", "streamlit_app.py")
 
 
+def _code_sans_commentaires(chemin: Path) -> str:
+    """Source d'un fichier, docstring de module et commentaires retirés.
+
+    Les docstrings de ce projet citent volontiers les pièges évités — dont
+    `runpy` — pour en garder la trace. Un test qui grep la source brute
+    confondrait l'explication avec l'usage.
+    """
+    import ast
+
+    source = chemin.read_text(encoding="utf-8")
+    arbre = ast.parse(source)
+    lignes = source.splitlines()
+
+    # Retirer la docstring de module (le seul bloc de prose volumineux ici).
+    doc = ast.get_docstring(arbre, clean=False)
+    if doc and arbre.body:
+        premier = arbre.body[0]
+        debut, fin = premier.lineno - 1, (premier.end_lineno or premier.lineno)
+        lignes = lignes[:debut] + lignes[fin:]
+
+    # Retirer les commentaires de fin de ligne et les lignes de commentaire.
+    sans_commentaire = [
+        ligne.split("#", 1)[0]
+        if ligne.lstrip().startswith("#") or " #" in ligne
+        else ligne
+        for ligne in lignes
+    ]
+    return "\n".join(sans_commentaire)
+
+
 @pytest.mark.parametrize("nom", POINTS_ENTREE)
 def test_point_entree_existe_a_la_racine(nom):
     """Chaque point d'entrée supporté est présent à la racine du dépôt."""
@@ -65,12 +95,31 @@ def test_navigation_explicite_declaree():
     que si `pages/` est adjacent au fichier d'entrée, condition invérifiable
     depuis le dépôt puisque le chemin d'entrée est configuré chez l'hébergeur.
     """
-    source = (RACINE / "streamlit_app.py").read_text(encoding="utf-8")
+    source = (RACINE / "src" / "routeur.py").read_text(encoding="utf-8")
     assert "st.navigation" in source, (
         "Le routeur doit déclarer les pages via st.navigation, sinon la "
         "navigation redevient dépendante du chemin du fichier d'entrée."
     )
     assert "construire_pages" in source
+
+
+def test_aucun_point_entree_n_utilise_runpy():
+    """Les points d'entrée importent le routeur ; ils ne l'exécutent pas.
+
+    `runpy.run_path` exécute un fichier dans un module neuf nommé `__main__` :
+    les modules de `src` importés par ce second exécutable sont réimportés
+    dans un autre contexte, et la production levait alors `ImportError` sur
+    `from .ui import …`. Un diagnostic déployé en production l'a établi —
+    `import src.ui` réussissait avant la délégation, et l'échec survenait
+    dans la réimportation.
+    """
+    for nom in POINTS_ENTREE:
+        code = _code_sans_commentaires(RACINE / nom)
+        assert "runpy" not in code, (
+            f"{nom} doit importer `src.routeur`, pas l'exécuter par runpy : "
+            f"la double importation casse la production."
+        )
+        assert "src.routeur" in code, f"{nom} doit déléguer à src.routeur"
 
 
 def test_home_delegue_au_routeur():
@@ -86,23 +135,19 @@ def test_home_delegue_au_routeur():
     production, sans que lint, tests ni CI le voient. Le rendu vit dans
     `src/accueil.py`.
     """
-    source = (RACINE / "Home.py").read_text(encoding="utf-8")
-    assert "streamlit_app.py" in source, "Home.py doit déléguer au routeur"
-    assert "st.metric" not in source and "colored_header" not in source, (
+    code = _code_sans_commentaires(RACINE / "Home.py")
+    assert "src.routeur" in code, "Home.py doit déléguer au routeur"
+    assert "st.metric" not in code, (
         "Home.py ne doit plus rendre l'accueil : ce rôle appartient à "
         "src/accueil.py."
     )
 
 
 def test_le_routeur_rend_l_accueil_par_import():
-    """Le routeur importe le rendu de l'accueil, sans `runpy`.
-
-    `runpy.run_path` réexécutait un fichier déjà en cours d'exécution, d'où la
-    réentrance qui cassait l'accueil en production.
-    """
-    source = (RACINE / "streamlit_app.py").read_text(encoding="utf-8")
-    assert "from src.accueil import" in source
-    assert "runpy" not in source, (
+    """Le routeur importe le rendu de l'accueil, sans `runpy`."""
+    code = _code_sans_commentaires(RACINE / "src" / "routeur.py")
+    assert "accueil" in code
+    assert "runpy" not in code, (
         "Le routeur ne doit plus exécuter de fichier par runpy : l'accueil "
         "est un module importé."
     )
