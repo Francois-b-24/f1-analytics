@@ -1,8 +1,11 @@
-import streamlit as st
-import pandas as pd
+import os
 from datetime import datetime
+
+import pandas as pd
+import streamlit as st
 from streamlit_extras.colored_header import colored_header
 
+from .config import logger
 from .openf1 import PREMIERE_SAISON
 
 
@@ -67,6 +70,61 @@ SESSIONS = {
 }
 
 
+# Auto-chargement de la dernière session terminée au premier affichage.
+#
+# Sans lui, une page ouverte directement (lien partagé, onglet neuf, favori)
+# s'affiche vide : `st.session_state` est propre à chaque session navigateur.
+# Avec lui, les onze pages montrent des données d'emblée.
+#
+# Le coût est réel — sept requêtes OpenF1 et ~3-4 s — d'où trois garde-fous :
+# une seule fois par session navigateur, jamais sous test, et un échec qui
+# retombe sur l'état vide au lieu de propager une erreur.
+#
+# Passer cette constante à False restaure le comportement « sélection
+# explicite » sans toucher au reste du code.
+AUTO_CHARGEMENT = True
+
+
+def _sous_test() -> bool:
+    """Vrai sous pytest, pour qu'aucun test ne déclenche de requête réseau.
+
+    Les tests de rendu vérifient qu'une page n'émet aucun appel OpenF1 : un
+    auto-chargement les rendrait faux, et la CI dépendrait du réseau.
+    """
+    import sys
+
+    return "pytest" in sys.modules or os.environ.get("F1_SANS_AUTO_CHARGEMENT") == "1"
+
+
+def _auto_charger_si_possible() -> None:
+    """Pré-sélectionne et charge la dernière session terminée, une seule fois.
+
+    Ne fait rien si une sélection existe déjà, si l'utilisateur a réinitialisé,
+    ou sous test. Les défauts proviennent de `_default_year()` et
+    `_last_completed_event()`, qui ne coûtent que le calendrier (caché 24 h) —
+    jamais une session.
+    """
+    if not AUTO_CHARGEMENT or _sous_test():
+        return
+    if st.session_state.get("auto_charge_tente") or st.session_state.get("loaded"):
+        return
+    # Un « Réinitialiser » explicite ne doit pas être défait au rerun suivant.
+    if st.session_state.get("reinit_demandee"):
+        return
+
+    st.session_state["auto_charge_tente"] = True
+    try:
+        annee = _default_year()
+        grand_prix = _last_completed_event(annee)
+        if not grand_prix:
+            return
+        st.session_state.update(
+            annee=annee, grand_prix=grand_prix, session_type="R", loaded=True,
+        )
+    except Exception as exc:  # noqa: BLE001 — un échec ne doit jamais casser la page
+        logger.warning("Auto-chargement impossible : %s", exc)
+
+
 def selecteur_session_global() -> None:
     """Sélecteur de session rendu dans la barre latérale, sur toutes les pages.
 
@@ -89,6 +147,8 @@ def selecteur_session_global() -> None:
     chargement sur `on_change` partirait à chaque cran de la molette, pour un
     Grand Prix parfois incohérent avec l'année qui vient d'être choisie.
     """
+    _auto_charger_si_possible()
+
     with st.sidebar:
         st.markdown("### Session")
 
@@ -130,11 +190,15 @@ def selecteur_session_global() -> None:
                     annee=annee, grand_prix=grand_prix,
                     session_type=session_type, loaded=True,
                 )
+                st.session_state.pop("reinit_demandee", None)
                 st.rerun()
         with reinit:
             if st.button("Réinitialiser", key="btn_reinit", width="stretch"):
                 for cle in ("annee", "grand_prix", "session_type", "loaded"):
                     st.session_state.pop(cle, None)
+                # Mémorisé pour que l'auto-chargement ne rétablisse pas
+                # aussitôt la session que l'utilisateur vient d'écarter.
+                st.session_state["reinit_demandee"] = True
                 st.rerun()
 
         if st.session_state.get("loaded"):
