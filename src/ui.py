@@ -57,75 +57,93 @@ def _default_year() -> int:
     return max(current - 1, PREMIERE_SAISON)
 
 
-def selecteurs_session():
+# Libellés des types de session, et seule source de leur ordre d'affichage.
+SESSIONS = {
+    "FP1": "Essais libres 1",
+    "FP2": "Essais libres 2",
+    "FP3": "Essais libres 3",
+    "Q": "Qualifications",
+    "R": "Course",
+}
+
+
+def selecteur_session_global() -> None:
+    """Sélecteur de session rendu dans la barre latérale, sur toutes les pages.
+
+    Pourquoi le routeur et pas les pages
+    ------------------------------------
+    Cette fonction est appelée une seule fois, par `streamlit_app.py`, avant
+    `.run()`. Trois conséquences voulues :
+
+    * la sélection est accessible depuis n'importe quelle page — auparavant
+      elle ne vivait que sur l'accueil, et changer de Grand Prix imposait d'y
+      retourner ;
+    * un point de rendu unique rend la duplication de clé structurellement
+      impossible. Rendre deux fois la même `key` dans un run lève
+      `StreamlitDuplicateElementKey`, une exception non rattrapée qui met la
+      page en erreur ;
+    * le widget étant rendu avant le corps de la page, une nouvelle sélection
+      est déjà lisible quand la page s'exécute, sans second rerun.
+
+    Le bouton **Charger** reste le seul déclencheur de chargement réseau : un
+    chargement sur `on_change` partirait à chaque cran de la molette, pour un
+    Grand Prix parfois incohérent avec l'année qui vient d'être choisie.
     """
-    Affiche les sélecteurs de session (année, Grand Prix, type) dans la sidebar.
+    with st.sidebar:
+        st.markdown("### Session")
 
-    Retour
-    ------
-    tuple
-        (année, grand_prix, session_type, loaded)
-    """
-    default_year = _default_year()
-    annee_def = st.session_state.get("annee", default_year)
+        annee_def = st.session_state.get("annee", _default_year())
+        annees = list(range(PREMIERE_SAISON, datetime.now().year + 1))[::-1]
+        annee = st.selectbox(
+            "Saison", annees,
+            index=annees.index(annee_def) if annee_def in annees else 0,
+            key="sb_annee",
+        )
 
-    events_def = _get_event_schedule(annee_def)
-    last_event = _last_completed_event(annee_def) or (events_def[0] if events_def else "")
-    grand_prix_def = st.session_state.get("grand_prix", last_event)
-    session_type_def = st.session_state.get("session_type", "R")
+        events = _get_event_schedule(annee)
+        if not events:
+            # Discret à dessein : la barre latérale est désormais rendue sur
+            # les onze pages, un st.warning y clignoterait partout.
+            st.caption(f"⚠️ Calendrier {annee} indisponible (réseau ou saison non publiée).")
+        options = events or ["—"]
 
-    # OpenF1, la source de données, ne couvre pas les saisons antérieures à 2023.
-    annees = list(range(PREMIERE_SAISON, datetime.now().year + 1))[::-1]
-    annee = st.selectbox(
-        "Saison", annees,
-        index=annees.index(annee_def) if annee_def in annees else 0,
-        key="sb_annee",
-    )
-    events = _get_event_schedule(annee)
-    if not events:
-        st.warning(f"Calendrier {annee} indisponible (problème réseau ou saison non publiée).")
-    grand_prix_options = events if events else ["—"]
-    grand_prix = st.selectbox(
-        "Grand Prix",
-        options=grand_prix_options,
-        index=grand_prix_options.index(grand_prix_def) if grand_prix_def in grand_prix_options else 0,
-        key="sb_gp",
-    )
-    session_labels = {
-        "FP1": "Essais libres 1",
-        "FP2": "Essais libres 2",
-        "FP3": "Essais libres 3",
-        "Q": "Qualifications",
-        "R": "Course",
-    }
-    session_display = st.selectbox(
-        "Type de session",
-        list(session_labels.values()),
-        index=list(session_labels.keys()).index(session_type_def) if session_type_def in session_labels else 4,
-        key="sb_type"
-    )
-    session_type = [k for k, v in session_labels.items() if v == session_display][0]
+        gp_def = st.session_state.get("grand_prix") or _last_completed_event(annee) or options[0]
+        grand_prix = st.selectbox(
+            "Grand Prix", options,
+            index=options.index(gp_def) if gp_def in options else 0,
+            key="sb_gp",
+        )
 
-    col_load, col_reset = st.columns(2)
-    with col_load:
-        if st.button("Charger", key="load_btn_home"):
-            st.session_state["annee"] = annee
-            st.session_state["grand_prix"] = grand_prix
-            st.session_state["session_type"] = session_type
-            st.session_state["loaded"] = True
+        type_def = st.session_state.get("session_type", "R")
+        libelles = list(SESSIONS.values())
+        affiche = st.selectbox(
+            "Type de session", libelles,
+            index=list(SESSIONS).index(type_def) if type_def in SESSIONS else len(libelles) - 1,
+            key="sb_type",
+        )
+        session_type = next(k for k, v in SESSIONS.items() if v == affiche)
 
-    with col_reset:
-        if st.button("Réinitialiser", key="reset_btn_home"):
-            for key in ["annee", "grand_prix", "session_type", "loaded"]:
-                if key in st.session_state:
-                    del st.session_state[key]
+        charger, reinit = st.columns(2)
+        with charger:
+            if st.button("Charger", key="btn_charger", width="stretch"):
+                st.session_state.update(
+                    annee=annee, grand_prix=grand_prix,
+                    session_type=session_type, loaded=True,
+                )
+                st.rerun()
+        with reinit:
+            if st.button("Réinitialiser", key="btn_reinit", width="stretch"):
+                for cle in ("annee", "grand_prix", "session_type", "loaded"):
+                    st.session_state.pop(cle, None)
+                st.rerun()
 
-    return (
-        st.session_state.get("annee", annee),
-        st.session_state.get("grand_prix", grand_prix),
-        st.session_state.get("session_type", session_type),
-        st.session_state.get("loaded", False),
-    )
+        if st.session_state.get("loaded"):
+            st.caption(
+                f"Chargée : **{st.session_state['annee']} · "
+                f"{st.session_state['grand_prix']} · "
+                f"{SESSIONS.get(st.session_state['session_type'], st.session_state['session_type'])}**"
+            )
+
 
 def selecteur_pilote_unique(pilotes: list[str]) -> str:
     """

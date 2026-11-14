@@ -26,7 +26,7 @@ if __name__ == "__main__":
     st.stop()
 
 from src.config import configure_page_home
-from src.ui import selecteurs_session, sidebar_hint_once
+from src.ui import selections_courantes, sidebar_hint_once
 from src.data import chargement_session
 from src.utils import formatage_timedelta
 from src.theme import COMPOSES, ORDRE_COMPOSES
@@ -57,12 +57,18 @@ st.markdown(
 
 
 sidebar_hint_once()
-# selecteurs_session() gère déjà la persistance dans st.session_state
-annee, grand_prix, session_type, loaded = selecteurs_session()
 
+# Le sélecteur de session vit dans le routeur (`streamlit_app.py`), donc dans
+# la barre latérale de toutes les pages. Le rendre aussi ici dupliquerait ses
+# clés dans le même run et lèverait `StreamlitDuplicateElementKey` : l'accueil
+# partirait en erreur.
+annee, grand_prix, session_type, loaded = selections_courantes(required=False)
 
 if not loaded:
-    st.info("Sélectionnez une année, un Grand Prix et un type de session, puis **Charger**")
+    st.info(
+        "Choisissez une saison, un Grand Prix et un type de session dans la "
+        "barre latérale, puis **Charger**."
+    )
     st.stop()
 
 # Chargement du WEEK-END de Grand prix

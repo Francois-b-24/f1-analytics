@@ -29,6 +29,7 @@ import streamlit as st
 
 from src.config import configure_page_home
 from src.navigation import construire_pages
+from src.ui import selecteur_session_global
 
 configure_page_home("F1 Analytics")
 
@@ -46,4 +47,12 @@ def _accueil() -> None:
     runpy.run_path(str(_HOME), run_name="__page__")
 
 
-st.navigation(construire_pages(_accueil)).run()
+pages = st.navigation(construire_pages(_accueil))
+
+# Rendu ici, et nulle part ailleurs : la barre latérale appartient au routeur,
+# donc le sélecteur existe sur toutes les pages et ses clés ne peuvent pas
+# être rendues deux fois dans un même run (`StreamlitDuplicateElementKey`).
+# Avant `.run()` pour que la page lise une sélection déjà à jour.
+selecteur_session_global()
+
+pages.run()
