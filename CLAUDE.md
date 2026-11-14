@@ -146,17 +146,34 @@ la panne historique. Vérifier `streamlit run streamlit_app.py` **et**
 
 La CI et AppTest ne suffisent pas : AppTest ne rend ni Plotly ni matplotlib, et
 c'est ce qui avait donné un faux feu vert pendant que la production servait une
-page blanche. Vérifier au navigateur, et sous la version exacte de la prod —
-`uv run` installe Streamlit 1.51 et réécrit `uv.lock`, alors que
-`requirements.txt` épingle 1.50.0 :
+page blanche. Trois pièges, tous rencontrés :
+
+- `uv run` installe Streamlit **1.51** et réécrit `uv.lock`, alors que
+  `requirements.txt` épingle 1.50.0. Sous 1.51, la barre latérale affiche les
+  noms de fichiers bruts — un faux bug qui n'existe pas en production ;
+- **la production exécute Python 3.13**, constaté dans une trace
+  (`/home/adminuser/venv/lib/python3.13/…`). `runtime.txt` l'indique
+  désormais, mais Streamlit Cloud ne le garantit pas : tester les deux ;
+- un environnement n'est fidèle que **construit depuis `requirements.txt`
+  seul**. Un venv où traîne une dépendance retirée rend invisible toute panne
+  liée à son absence.
 
 ```bash
-uv venv --python 3.11 /tmp/venv-prod
+uv venv --python 3.13 /tmp/venv-prod
 VIRTUAL_ENV=/tmp/venv-prod uv pip install -r requirements.txt pytest==8.3.4
 /tmp/venv-prod/bin/python -m pytest tests/ -q --ignore=tests/test_data_smoke.py
 uv tool run ruff@0.6.9 check .          # version de la CI, lint bloquant
-/tmp/venv-prod/bin/python -m streamlit run streamlit_app.py --server.headless true
+/tmp/venv-prod/bin/python -m streamlit run Home.py --server.headless true
 ```
+
+**Quand la production échoue sans message.** Streamlit Cloud masque le texte
+des exceptions (« original error message is redacted ») et ses logs ne sont pas
+accessibles publiquement. Deviner coûte un déploiement par hypothèse : trois
+ont été éliminées ainsi pour rien. Déployer plutôt un bloc de diagnostic qui
+capture l'exception à l'endroit où elle se produit et l'affiche avec
+`st.code(traceback.format_exc())`. Et vérifier d'abord que la production sert
+bien le dernier commit — un numéro de ligne absent du dépôt trahit un décalage
+de version, pas un bug.
 
 Sonder ensuite chaque route dans un **contexte navigateur neuf** (un onglet
 réutilisé masque l'auto-chargement) et vérifier : sections de nav présentes,

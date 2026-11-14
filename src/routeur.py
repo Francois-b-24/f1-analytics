@@ -8,48 +8,10 @@ levait `ImportError` en production.
 """
 import streamlit as st
 
+from .accueil import rendre as rendre_accueil
 from .config import configure_page_home
 from .navigation import construire_pages
-
-# --- DIAGNOSTIC TEMPORAIRE (à retirer) -----------------------------------
-# Streamlit Cloud masque le message des ImportError. On importe ici, en
-# capturant la trace complète pour l'afficher dans l'application.
-_ERREUR_IMPORT = None
-try:
-    from .accueil import rendre as rendre_accueil
-    from .ui import selecteur_session_global
-except BaseException:
-    import traceback
-
-    _ERREUR_IMPORT = traceback.format_exc()
-
-    def rendre_accueil() -> None:
-        st.error("DIAGNOSTIC — import de .accueil / .ui impossible :")
-        st.code(_ERREUR_IMPORT)
-
-        # Que contient réellement le src/ui.py déployé ?
-        from pathlib import Path as _P
-
-        import src.ui as _u
-
-        chemin = _P(_u.__file__)
-        source = chemin.read_text(encoding="utf-8")
-        st.write(f"**src/ui.py déployé** : {len(source)} octets, "
-                 f"{len(source.splitlines())} lignes")
-        st.write("**attributs publics** :",
-                 sorted(a for a in dir(_u) if not a.startswith("_")))
-        st.write("**'barre_contexte' dans la source** :",
-                 "barre_contexte" in source)
-        definitions = [
-            f"{numero}: {ligne}"
-            for numero, ligne in enumerate(source.splitlines(), 1)
-            if ligne.startswith(("def ", "SESSIONS", "AUTO_CHARGEMENT"))
-        ]
-        st.code("\n".join(definitions))
-
-    def selecteur_session_global() -> None:
-        pass
-# --- fin du diagnostic ---------------------------------------------------
+from .ui import selecteur_session_global
 
 
 def demarrer() -> None:
