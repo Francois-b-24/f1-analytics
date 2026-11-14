@@ -11,13 +11,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 est ce que demande runtime.txt ; 3.13 est ce que Streamlit Cloud
+        # exécute réellement — constaté dans une trace de production. Tester la
+        # seule 3.11 laissait passer une panne qui ne se voyait qu'en ligne.
+        python-version: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python 3.11
+      - name: Setup Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
           cache: "pip"
 
       - name: Install dependencies

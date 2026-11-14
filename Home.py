@@ -26,7 +26,16 @@ if __name__ == "__main__":
     st.stop()
 
 from src.config import configure_page_home
-from src.ui import barre_contexte, selections_courantes
+# `src.ui` est importé comme module, et ses fonctions résolues à l'appel.
+#
+# Ce fichier est exécuté deux fois dans la même pile : lancé directement il
+# délègue au routeur par `runpy.run_path`, qui réexécute `streamlit_app.py`
+# dans un espace de noms neuf ; ce routeur rend l'accueil, donc relance ce
+# fichier. `from src.ui import <symbole>` échouait alors en production —
+# `ImportError` — le module étant encore en cours d'initialisation au moment
+# du second passage. Importer le module diffère la résolution et supprime
+# cette dépendance à l'ordre d'exécution.
+from src import ui as _ui
 from src.data import chargement_session
 from src.utils import formatage_timedelta
 from src.theme import COMPOSES, ORDRE_COMPOSES
@@ -61,13 +70,13 @@ st.caption(
     "météo. Choisissez la session dans la barre latérale ; les pages sont "
     "groupées par thème juste au-dessus."
 )
-barre_contexte()
+_ui.barre_contexte()
 
 # Le sélecteur de session vit dans le routeur (`streamlit_app.py`), donc dans
 # la barre latérale de toutes les pages. Le rendre aussi ici dupliquerait ses
 # clés dans le même run et lèverait `StreamlitDuplicateElementKey` : l'accueil
 # partirait en erreur.
-annee, grand_prix, session_type, loaded = selections_courantes(required=False)
+annee, grand_prix, session_type, loaded = _ui.selections_courantes(required=False)
 
 if not loaded:
     st.info(

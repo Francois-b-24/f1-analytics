@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime
 
@@ -5,8 +6,12 @@ import pandas as pd
 import streamlit as st
 from streamlit_extras.colored_header import colored_header
 
-from .config import logger
 from .openf1 import PREMIERE_SAISON
+
+# Logger obtenu par son nom plutôt qu'importé de `src.config` : ce module y
+# tire fastf1 et l'initialisation de Sentry, chaîne d'imports inutile ici et
+# qui a fait échouer l'import de `src.ui` en production.
+logger = logging.getLogger("f1_analytics.ui")
 
 
 @st.cache_data(ttl=86400, show_spinner=False)

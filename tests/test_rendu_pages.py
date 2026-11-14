@@ -251,3 +251,36 @@ def test_accueil_rend_avec_session_chargee(session_chargee):
         app.session_state[cle] = valeur
     app.run()
     assert not app.exception, [e.value for e in app.exception]
+
+
+def test_home_lance_directement_delegue_sans_import_error(sans_reseau, monkeypatch):
+    """`Home.py` lancé comme point d'entrée rend l'app, sans ImportError.
+
+    Ce chemin exécute `Home.py` deux fois dans la même pile : lancé
+    directement il délègue au routeur par `runpy.run_path`, lequel réexécute
+    `streamlit_app.py` dans un espace de noms neuf et rend l'accueil — donc
+    relance `Home.py`.
+
+    La production a cassé exactement là : `from src.ui import barre_contexte`
+    levait `ImportError` au second passage. Ce test couvre le chemin, mais
+    honnêteté sur sa portée — il ne reproduit pas la panne : ni AppTest ni un
+    `runpy` en interpréteur froid ne la déclenchent hors de Streamlit Cloud.
+    Seul `Home.py` important `src.ui` comme module, et non ses symboles, rend
+    ce chemin insensible à l'ordre d'initialisation.
+
+    Les modules du paquet sont retirés de `sys.modules` pour partir au plus
+    près d'un interpréteur froid, les imports déjà résolus par les tests
+    précédents masquant une partie du chemin.
+    """
+    import sys
+
+    for nom in [n for n in sys.modules if n == "src" or n.startswith("src.")]:
+        monkeypatch.delitem(sys.modules, nom, raising=False)
+
+    app = AppTest.from_file(str(RACINE / "Home.py"), default_timeout=DELAI)
+    app.run()
+
+    messages = [e.value for e in app.exception]
+    assert not any("ImportError" in str(m) or "cannot import name" in str(m)
+                   for m in messages), messages
+    assert not app.exception, messages
