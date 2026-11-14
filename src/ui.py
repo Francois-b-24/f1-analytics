@@ -297,14 +297,6 @@ def selections_courantes(required: bool = True):
 
     return annee, grand_prix, session_type, loaded
 
-def sidebar_hint_once():
-    if "sidebar_hint_ack" not in st.session_state:
-        st.session_state["sidebar_hint_ack"] = False
-    if not st.session_state["sidebar_hint_ack"]:
-        st.caption("Explorez interactivement les données d'un week-end de Grand Prix (tours, télémétrie, pneus, arrêts, météo) ✨")
-        st.caption("👈 Astuce : tous les pages sont dans la barre latérale à gauche.")
-        st.button("Masquer ce message", on_click=lambda: st.session_state.update(sidebar_hint_ack=True))
-
 def afficher_figure(fig) -> None:
     """Affiche une figure matplotlib puis la libère.
 
@@ -352,8 +344,34 @@ def _etat_vide() -> None:
     lien_accueil()
 
 
+def barre_contexte() -> None:
+    """Rappelle la session affichée, juste sous le titre de la page.
+
+    Sans ce rappel, rien n'indique à quel Grand Prix se rapportent les
+    graphiques : la sélection vit dans la barre latérale, qui peut être
+    repliée. Silencieux si aucune session n'est chargée — l'état vide dit déjà
+    ce qu'il faut.
+    """
+    if not st.session_state.get("loaded"):
+        return
+    annee = st.session_state.get("annee")
+    grand_prix = st.session_state.get("grand_prix")
+    type_session = st.session_state.get("session_type")
+    libelle = SESSIONS.get(type_session, type_session)
+    st.markdown(
+        '<div class="f1-contexte">'
+        f"<span><strong>{annee}</strong></span>"
+        '<span class="f1-sep">•</span>'
+        f"<span><strong>{grand_prix}</strong></span>"
+        '<span class="f1-sep">•</span>'
+        f"<span>{libelle}</span>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def entete_page(titre: str, icone: str = "", description: str | None = None) -> None:
-    """En-tête de page : titre, puis description optionnelle.
+    """En-tête de page : titre, description, puis rappel de la session.
 
     Remplace les `st.subheader` + `st.caption` dispersés, dont la présence et
     la formulation variaient d'une page à l'autre (certaines pages n'avaient
@@ -362,6 +380,7 @@ def entete_page(titre: str, icone: str = "", description: str | None = None) -> 
     st.title(f"{icone} {titre}".strip())
     if description:
         st.caption(description)
+    barre_contexte()
 
 
 def page_session(titre: str, icone: str = "", description: str | None = None):

@@ -137,11 +137,68 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
     color: var(--text-secondary) !important;
 }
 
-/* === Headings === */
+/* === Headings ===
+   Échelle explicite : seuls h2/h3 étaient traités, et h1 — désormais le titre
+   de chaque page via entete_page() — héritait d'une taille par défaut proche
+   de h2, ce qui écrasait la hiérarchie. */
 h1, h2, h3, h4, h5, h6 {
     color: var(--text-primary) !important;
     font-weight: 600;
     letter-spacing: -0.2px;
+}
+
+h1 {
+    font-size: 2rem !important;
+    line-height: 1.2 !important;
+    letter-spacing: -0.5px !important;
+    margin: 0 0 0.15rem 0 !important;
+    padding-top: 0 !important;
+}
+
+h2 {
+    font-size: 1.35rem !important;
+    margin: 2rem 0 0.6rem 0 !important;
+}
+
+h3 {
+    font-size: 1.1rem !important;
+    margin: 1.4rem 0 0.5rem 0 !important;
+}
+
+/* Le sous-titre d'une page suit immédiatement son h1 : on resserre l'espace
+   pour qu'ils se lisent comme un seul bloc. */
+h1 + [data-testid="stCaptionContainer"],
+h1 + [data-testid="stCaptionContainer"] p {
+    margin-top: 0 !important;
+    color: var(--text-secondary) !important;
+    font-size: 0.95rem !important;
+}
+
+/* === Barre de contexte « session courante » ===
+   Rappelle en permanence ce qui est affiché. Le besoin existait déjà :
+   context_sidebar_only() tentait de le couvrir, sans jamais être appelé. */
+.f1-contexte {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.9rem;
+    align-items: center;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-left: 3px solid var(--accent-red);
+    border-radius: 6px;
+    padding: 0.55rem 0.9rem;
+    margin: 0.3rem 0 1.4rem 0;
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+}
+
+.f1-contexte strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.f1-contexte .f1-sep {
+    color: var(--border-default);
 }
 
 /* Colored header de streamlit-extras */
@@ -401,6 +458,62 @@ div[data-testid="stMetric"] [data-testid="stMetricDelta"] {
 
 /* === Hide Streamlit default chrome === */
 #MainMenu, footer { visibility: hidden; }
+
+/* === En-têtes de section de la navigation ===
+   Les dix onglets sont désormais groupés : les titres de section doivent se
+   distinguer des liens sans leur voler l'attention. */
+[data-testid="stSidebarNav"] ul {
+    padding-top: 0.2rem;
+}
+
+[data-testid="stSidebarNav"] > div > span,
+[data-testid="stSidebarNavSeparator"] + div span {
+    color: var(--text-muted) !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.9px;
+}
+
+[data-testid="stSidebarNav"] a {
+    border-radius: 6px;
+}
+
+[data-testid="stSidebarNav"] a:hover {
+    background-color: var(--accent-red-soft) !important;
+}
+
+/* === Mobile ===
+   L'app est consultée sur téléphone pendant les week-ends de course : on
+   resserre les marges et on laisse les colonnes s'empiler. */
+@media (max-width: 640px) {
+    .block-container {
+        padding-left: 0.9rem !important;
+        padding-right: 0.9rem !important;
+        padding-top: 2.6rem !important;
+    }
+
+    h1 { font-size: 1.5rem !important; }
+    h2 { font-size: 1.18rem !important; }
+
+    div[data-testid="stMetric"] {
+        padding: 0.7rem 0.85rem !important;
+    }
+
+    div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+        font-size: 1.3em;
+    }
+
+    .f1-contexte {
+        font-size: 0.85rem;
+        padding: 0.5rem 0.7rem;
+    }
+
+    /* Les tableaux larges défilent dans leur cadre au lieu d'élargir la page. */
+    [data-testid="stDataFrame"] {
+        overflow-x: auto;
+    }
+}
 
 /* === Colored header (streamlit-extras) — override bandeau coloré === */
 [data-testid="stMarkdownContainer"] hr {

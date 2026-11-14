@@ -26,7 +26,7 @@ if __name__ == "__main__":
     st.stop()
 
 from src.config import configure_page_home
-from src.ui import selections_courantes, sidebar_hint_once
+from src.ui import barre_contexte, selections_courantes
 from src.data import chargement_session
 from src.utils import formatage_timedelta
 from src.theme import COMPOSES, ORDRE_COMPOSES
@@ -56,7 +56,12 @@ st.markdown(
 )
 
 
-sidebar_hint_once()
+st.caption(
+    "Explorez un week-end de Grand Prix : chronos, télémétrie, pneus, arrêts, "
+    "météo. Choisissez la session dans la barre latérale ; les pages sont "
+    "groupées par thème juste au-dessus."
+)
+barre_contexte()
 
 # Le sélecteur de session vit dans le routeur (`streamlit_app.py`), donc dans
 # la barre latérale de toutes les pages. Le rendre aussi ici dupliquerait ses
