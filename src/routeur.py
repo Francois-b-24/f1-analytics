@@ -8,10 +8,28 @@ levait `ImportError` en production.
 """
 import streamlit as st
 
-from .accueil import rendre as rendre_accueil
 from .config import configure_page_home
 from .navigation import construire_pages
-from .ui import selecteur_session_global
+
+# --- DIAGNOSTIC TEMPORAIRE (à retirer) -----------------------------------
+# Streamlit Cloud masque le message des ImportError. On importe ici, en
+# capturant la trace complète pour l'afficher dans l'application.
+_ERREUR_IMPORT = None
+try:
+    from .accueil import rendre as rendre_accueil
+    from .ui import selecteur_session_global
+except BaseException:
+    import traceback
+
+    _ERREUR_IMPORT = traceback.format_exc()
+
+    def rendre_accueil() -> None:
+        st.error("DIAGNOSTIC — import de .accueil / .ui impossible :")
+        st.code(_ERREUR_IMPORT)
+
+    def selecteur_session_global() -> None:
+        pass
+# --- fin du diagnostic ---------------------------------------------------
 
 
 def demarrer() -> None:
