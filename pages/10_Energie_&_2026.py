@@ -13,13 +13,13 @@ from src.analytics import (
 from src.config import configure_page
 from src.data import chargement_session, telemetrie_pilote
 from src.theme import ACCENT_BLUE, ACCENT_GOLD, ACCENT_RED, FREINAGE, TRACTION
-from src.ui import selections_courantes
+from src.ui import entete_page, selections_courantes
 
 configure_page("F1 Analytics – Énergie & 2026", page_icon="⚡")
 
-st.subheader("⚡ Énergie & réglementation 2026")
-st.caption(
-    "Lecture du comportement énergétique d'un tour à partir de la télémétrie publiée."
+entete_page(
+    "Énergie & 2026", "⚡",
+    "Lecture du comportement énergétique d'un tour à partir de la télémétrie publiée.",
 )
 
 # ---------------------------------------------------------------------------
@@ -61,11 +61,9 @@ que les indicateurs ci-dessous sont construits.
 """
     )
 
-annee, grand_prix, session_type, loaded = selections_courantes(required=True)
-if not loaded:
-    st.info("Charge d'abord une session depuis la page Home.")
-    st.stop()
-
+# L'en-tête et l'avertissement méthodologique ci-dessus s'affichent avant la
+# garde de session : le statut d'estimation doit être lu même sans données.
+annee, grand_prix, session_type, _ = selections_courantes(required=True)
 data = chargement_session(annee, grand_prix, session_type)
 pilotes = data["pilotes"]
 best_laps = data.get("best_laps", {})

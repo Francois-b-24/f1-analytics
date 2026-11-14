@@ -210,9 +210,7 @@ def selections_courantes(required: bool = True):
     loaded = st.session_state.get("loaded", False)
 
     if required and (annee is None or grand_prix is None or session_type is None or not loaded):
-        st.info("Veuillez d’abord sélectionner et **charger** une session sur la page **Home**.")
-        from .navigation import lien_accueil
-        lien_accueil()
+        _etat_vide()
         st.stop()
 
     return annee, grand_prix, session_type, loaded
@@ -224,33 +222,6 @@ def sidebar_hint_once():
         st.caption("Explorez interactivement les données d'un week-end de Grand Prix (tours, télémétrie, pneus, arrêts, météo) ✨")
         st.caption("👈 Astuce : tous les pages sont dans la barre latérale à gauche.")
         st.button("Masquer ce message", on_click=lambda: st.session_state.update(sidebar_hint_ack=True))
-
-def sidebar_debug_switch():
-    """Ajoute un switch dans la sidebar pour activer le mode debug global."""
-    with st.sidebar:
-        st.session_state['debug_mode'] = st.checkbox('🐞 Mode debug (infos techniques)', value=st.session_state.get('debug_mode', False))
-
-def debug_expander(msg, details):
-    """Affiche un expander avec un message et des infos debug si le mode debug est actif."""
-    if st.session_state.get('debug_mode', False):
-        with st.expander(msg):
-            st.write(details)
-
-def context_sidebar_only():
-    """Résumé session chargée sans aucune interaction ni selectbox."""
-    with st.sidebar:
-        st.markdown("""
-        <div style='font-size:1.1em;font-weight:bold;margin-bottom:0.5em;'>📋 <u>Session courante :</u></div>""", unsafe_allow_html=True)
-        annee = st.session_state.get("annee")
-        grand_prix = st.session_state.get("grand_prix")
-        session_type = st.session_state.get("session_type")
-        loaded = st.session_state.get("loaded")
-        if loaded and annee and grand_prix and session_type:
-            st.markdown(f"""
-            <div style='font-size:0.98em;'><b>🎯 Session:</b> {annee} – {grand_prix} [{session_type}]</div>""", unsafe_allow_html=True)
-        else:
-            st.error("Aucune session chargée. Revenez à la page Home.")
-
 
 def afficher_figure(fig) -> None:
     """Affiche une figure matplotlib puis la libère.
@@ -267,3 +238,65 @@ def afficher_figure(fig) -> None:
 
     st.pyplot(fig, width="stretch")
     plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Préambule de page
+#
+# Les dix pages répétaient le même bloc : récupérer les sélections, tester
+# `loaded`, charger la session. Quatre formulations différentes du même message
+# s'étaient installées, et le test `if not loaded` qui suivait
+# `selections_courantes(required=True)` était mort — ce dernier appelle déjà
+# `st.stop()`. Tout est désormais ici, en un seul endroit.
+# ---------------------------------------------------------------------------
+
+
+def _etat_vide() -> None:
+    """Message affiché quand aucune session n'est chargée.
+
+    Formulation unique pour les dix pages. Le lien vers l'accueil passe par
+    `lien_accueil()` : sous `st.navigation`, une page est identifiée par son
+    objet `StreamlitPage` : lui passer un chemin de fichier lève
+    `StreamlitPageNotFoundError` — c'est ce qui avait cassé les dix onglets.
+
+    L'import est différé pour éviter le cycle `ui` ↔ `navigation`.
+    """
+    st.info(
+        "Aucune session chargée. Choisissez une saison, un Grand Prix et un "
+        "type de session dans la barre latérale, puis **Charger**."
+    )
+    from .navigation import lien_accueil
+
+    lien_accueil()
+
+
+def entete_page(titre: str, icone: str = "", description: str | None = None) -> None:
+    """En-tête de page : titre, puis description optionnelle.
+
+    Remplace les `st.subheader` + `st.caption` dispersés, dont la présence et
+    la formulation variaient d'une page à l'autre (certaines pages n'avaient
+    aucun titre).
+    """
+    st.title(f"{icone} {titre}".strip())
+    if description:
+        st.caption(description)
+
+
+def page_session(titre: str, icone: str = "", description: str | None = None):
+    """Préambule commun aux pages : en-tête, sélections, chargement.
+
+    Arrête la page sur un état vide si aucune session n'est chargée — les
+    appelants n'ont donc pas à retester `loaded`.
+
+    Retour
+    ------
+    tuple
+        `(data, annee, grand_prix, session_type)` où `data` est le dict
+        renvoyé par `chargement_session`.
+    """
+    from .data import chargement_session
+
+    entete_page(titre, icone, description)
+    annee, grand_prix, session_type, _ = selections_courantes(required=True)
+    data = chargement_session(annee, grand_prix, session_type)
+    return data, annee, grand_prix, session_type

@@ -3,20 +3,15 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 from src.config import configure_page
-from src.ui import selections_courantes
-from src.data import chargement_session
+from src.ui import page_session
 
 configure_page("F1 Analytics – Météo")
 
-st.subheader("Données météo de la session")
 
-annee, grand_prix, session_type, loaded = selections_courantes(required=True)
-
-if not loaded:
-    st.info("Charge d’abord une session depuis la page Home")
-    st.stop()
-
-data = chargement_session(annee, grand_prix, session_type)
+data, annee, grand_prix, session_type = page_session(
+    "Météo", "🌦️",
+    "Conditions relevées pendant la session : températures, humidité, vent.",
+)
 meteo = data["meteo"]
 
 if not meteo.empty:

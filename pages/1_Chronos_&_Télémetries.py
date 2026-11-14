@@ -3,29 +3,20 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from src.config import configure_page
-from src.ui import selecteurs_pilotes, selections_courantes
-from src.data import chargement_session, tour_rapide_tel
+from src.ui import page_session, selecteurs_pilotes
+from src.data import tour_rapide_tel
 from src.utils import formatage_timedelta
 from src.analytics import delta_time_vs_distance
-from src.navigation import lien_accueil
 
 from streamlit_extras.colored_header import colored_header
 
 
 configure_page("F1 Analytics – Tours & Chronos")
 
-st.subheader("Tours & Chronos")
-st.caption("Comparaison des performances entre 2 pilotes possible.")
-
-# 1) Récupérer les sélections faites sur Home
-annee, grand_prix, session_type, loaded = selections_courantes(required=True)
-if not loaded:
-    st.warning("Aucune session n'est chargée. Retournez à l'accueil.")
-    lien_accueil("🏠 Retour à la Home")
-    st.stop()
-
-# 2) Charger les données une seule fois (cache côté src.data)
-data = chargement_session(annee, grand_prix, session_type)
+data, annee, grand_prix, session_type = page_session(
+    "Chronos & télémétries", "⏱️",
+    "Temps au tour et télémétrie, avec comparaison possible de deux pilotes.",
+)
 tours = data["tours"]
 pilotes = data["pilotes"]
 

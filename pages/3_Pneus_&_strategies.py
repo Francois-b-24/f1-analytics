@@ -4,8 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from src.config import configure_page
-from src.ui import selections_courantes
-from src.data import chargement_session
+from src.ui import page_session
 from src.analytics import (
     stint_degradation,
     stint_degradation_fits,
@@ -14,15 +13,11 @@ from src.analytics import (
 
 configure_page("F1 Analytics – Pneus & Stratégie")
 
-st.subheader("Pneus & Stratégie")
 
-annee, grand_prix, session_type, loaded = selections_courantes(required=True)
-
-if not loaded:
-    st.info("Charge d’abord une session depuis la page Home.")
-    st.stop()
-
-data = chargement_session(annee, grand_prix, session_type)
+data, annee, grand_prix, session_type = page_session(
+    "Pneus & stratégies", "🛞",
+    "Relais, composés et dégradation des pneus au fil de la session.",
+)
 tours = data["tours"]
 pilotes = data["pilotes"]
 
@@ -61,11 +56,6 @@ else:
 # F2 — Modèle de dégradation de stint
 # ---------------------------------------------------------------------------
 st.subheader("Dégradation des pneus par stint")
-st.caption(
-    "Régression linéaire LapTime ~ TyreLife par stint. "
-    "Les in/out laps et les outliers (IQR×1.5) sont exclus. "
-    "La **pente** représente la dégradation en secondes/tour."
-)
 
 driver_options = sorted(tours["Driver"].dropna().unique().tolist())
 default_drivers = driver_options[: min(4, len(driver_options))]

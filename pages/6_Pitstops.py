@@ -1,20 +1,15 @@
 import streamlit as st
 from src.config import configure_page
-from src.ui import selections_courantes
-from src.data import chargement_session
+from src.ui import page_session
 from src.utils import formatage_timedelta
 
 configure_page("F1 Analytics – Arrêts aux stands")
 
-st.subheader("Arrêts aux stands")
 
-annee, grand_prix, session_type, loaded = selections_courantes(required=True)
-
-if not loaded:
-    st.info("Charge d’abord une session depuis la Home.")
-    st.stop()
-
-data = chargement_session(annee, grand_prix, session_type)
+data, annee, grand_prix, session_type = page_session(
+    "Arrêts aux stands", "🔧",
+    "Arrêts détectés à partir des tours d'entrée et de sortie des stands.",
+)
 tours = data["tours"]
 
 st.subheader("Arrêts détectés")

@@ -1,26 +1,17 @@
 from src.data import figure_carte_vitesse, figure_carte_rapports
 import streamlit as st
 from src.config import configure_page
-from src.data import chargement_session, telemetrie_pilote
-from src.ui import selections_courantes, selecteur_pilote_unique, afficher_figure
-from src.navigation import lien_accueil
+from src.data import telemetrie_pilote
+from src.ui import afficher_figure, page_session, selecteur_pilote_unique
 from streamlit_extras.colored_header import colored_header
 
 
 configure_page("F1 Analytics – Cartographie")
-st.subheader("Cartographie")
-st.caption(
+data, annee, grand_prix, session_type = page_session(
+    "Cartographie", "🗺️",
     "Tracé du circuit coloré par la vitesse et par le rapport engagé, "
-    "sur le tour le plus rapide du pilote sélectionné."
+    "sur le tour le plus rapide du pilote sélectionné.",
 )
-
-annee, grand_prix, session_type, loaded = selections_courantes(required=True)
-if not loaded:
-    st.warning("Aucune session n'est chargée. Retournez à la page d'accueil.")
-    lien_accueil("🏠 Retour à la Home")
-    st.stop()
-
-data = chargement_session(annee, grand_prix, session_type)
 pilotes = data['pilotes']
 best_laps = data.get("best_laps", {})
 

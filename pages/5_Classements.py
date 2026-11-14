@@ -1,24 +1,23 @@
 import streamlit as st
 from src.config import configure_page
-from src.ui import selections_courantes
 from src.data import (
-    chargement_session,
-    classement_session,
-    calcul_classement_pilote,
     calcul_classement_constructeur,
+    calcul_classement_pilote,
+    classement_session,
 )
+from src.ui import page_session
 
 configure_page("F1 Analytics – Classements")
 
+data, annee, grand_prix, session_type = page_session(
+    "Classements", "🏆",
+    "Classement de la session et championnats pilotes et constructeurs.",
+)
+
+# Les onglets sont créés après le préambule : construits avant, ils
+# s'affichaient vides quand aucune session n'était chargée.
 t1, t2 = st.tabs(["Classement session", "Championnat"])
 
-annee, grand_prix, session_type, loaded = selections_courantes(required=True)
-
-if not loaded:
-    st.info("Charge d’abord une session depuis la page Home")
-    st.stop()
-
-data = chargement_session(annee, grand_prix, session_type)
 tours = data["tours"]
 resultats = data["resultats"]
 

@@ -2,26 +2,18 @@ import streamlit as st
 import plotly.express as px
 
 from src.config import configure_page
-from src.ui import selections_courantes
-from src.data import chargement_session
+from src.ui import page_session
 from src.analytics import sector_times_long, sector_best_per_driver
 from streamlit_extras.colored_header import colored_header
 
 
 configure_page("F1 Analytics – Analyse par secteur")
 
-st.subheader("Analyse par secteur")
-st.caption(
-    "Décomposition des temps au tour en 3 secteurs. Permet d'identifier "
-    "dans quelle portion du circuit un pilote gagne ou perd du temps."
+
+data, annee, grand_prix, session_type = page_session(
+    "Secteurs", "📐",
+    "Décomposition des temps au tour en 3 secteurs : où un pilote gagne ou perd du temps.",
 )
-
-annee, grand_prix, session_type, loaded = selections_courantes(required=True)
-if not loaded:
-    st.info("Charge d’abord une session depuis la page Home.")
-    st.stop()
-
-data = chargement_session(annee, grand_prix, session_type)
 tours = data["tours"]
 pilotes = data["pilotes"]
 
