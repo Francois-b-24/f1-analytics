@@ -27,6 +27,24 @@ except BaseException:
         st.error("DIAGNOSTIC — import de .accueil / .ui impossible :")
         st.code(_ERREUR_IMPORT)
 
+        # Que contient réellement le src/ui.py déployé ?
+        from pathlib import Path as _P
+
+        import src.ui as _u
+
+        chemin = _P(_u.__file__)
+        source = chemin.read_text(encoding="utf-8")
+        st.write(f"**src/ui.py déployé** : {len(source)} octets, "
+                 f"{len(source.splitlines())} lignes")
+        st.write("**attributs publics** :",
+                 sorted(a for a in dir(_u) if not a.startswith("_")))
+        st.write("**'barre_contexte' dans la source** :",
+                 "barre_contexte" in source)
+        st.code("\n".join(
+            f"{i}: {l}" for i, l in enumerate(source.splitlines(), 1)
+            if l.startswith("def ") or l.startswith("SESSIONS")
+            or l.startswith("AUTO_CHARGEMENT")))
+
     def selecteur_session_global() -> None:
         pass
 # --- fin du diagnostic ---------------------------------------------------
