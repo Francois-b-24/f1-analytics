@@ -40,10 +40,12 @@ except BaseException:
                  sorted(a for a in dir(_u) if not a.startswith("_")))
         st.write("**'barre_contexte' dans la source** :",
                  "barre_contexte" in source)
-        st.code("\n".join(
-            f"{i}: {l}" for i, l in enumerate(source.splitlines(), 1)
-            if l.startswith("def ") or l.startswith("SESSIONS")
-            or l.startswith("AUTO_CHARGEMENT")))
+        definitions = [
+            f"{numero}: {ligne}"
+            for numero, ligne in enumerate(source.splitlines(), 1)
+            if ligne.startswith(("def ", "SESSIONS", "AUTO_CHARGEMENT"))
+        ]
+        st.code("\n".join(definitions))
 
     def selecteur_session_global() -> None:
         pass
